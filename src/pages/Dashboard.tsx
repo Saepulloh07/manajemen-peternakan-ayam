@@ -3,326 +3,436 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
-  TrendingUp,
-  Skull,
-  Package,
-  Activity,
-  AlertTriangle,
-  ArrowUpRight,
-  TrendingDown,
-  Target,
-  Syringe
+  TrendingUp, Skull, Package, Activity, AlertTriangle,
+  ArrowUpRight, TrendingDown, Target, Egg, DollarSign,
+  Syringe, CheckCircle2, BarChart3, Flame,
 } from 'lucide-react';
 import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer
+  AreaChart, Area, BarChart, Bar, LineChart, Line,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { formatCurrency, cn } from '../lib/utils';
 import { motion } from 'motion/react';
+import { EggCategory } from '../types';
 
 import { useHouse } from '../HouseContext';
+import { useFlock } from '../FlockContext';
+import { useGlobalData } from '../GlobalContext';
 
-const data = [
-  { name: 'Sen', production: 92, feed: 120, mortality: 2 },
-  { name: 'Sel', production: 94, feed: 122, mortality: 1 },
-  { name: 'Rab', production: 91, feed: 121, mortality: 0 },
-  { name: 'Kam', production: 89, feed: 119, mortality: 4 },
-  { name: 'Jum', production: 93, feed: 120, mortality: 1 },
-  { name: 'Sab', production: 95, feed: 125, mortality: 0 },
-  { name: 'Min', production: 92, feed: 121, mortality: 2 },
-];
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const monthlyData = [
-  { name: 'Jan', production: 2800, feed: 3600, mortality: 45 },
-  { name: 'Feb', production: 2950, feed: 3650, mortality: 38 },
-  { name: 'Mar', production: 3100, feed: 3700, mortality: 40 },
-  { name: 'Apr', production: 3050, feed: 3680, mortality: 35 },
-  { name: 'Mei', production: 3200, feed: 3750, mortality: 30 },
-  { name: 'Jun', production: 3150, feed: 3720, mortality: 32 },
-  { name: 'Jul', production: 3250, feed: 3800, mortality: 28 },
-];
+function getStrainStandardHDP(ageWeeks: number): number {
+  if (ageWeeks < 18) return 0;
+  if (ageWeeks < 22) return 50;
+  if (ageWeeks < 26) return 80;
+  if (ageWeeks < 30) return 92;
+  if (ageWeeks < 50) return 94;
+  if (ageWeeks < 65) return 88;
+  return 78;
+}
 
-interface MetricCardProps {
+function getWeekAgo(n: number) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().split('T')[0];
+}
+
+const DAY_LABELS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+interface KpiCardProps {
   label: string;
   value: string | number;
-  subValue?: string;
+  sub?: string;
   icon: React.ElementType;
   trend?: 'up' | 'down' | 'neutral';
-  trendValue?: string;
-  color?: string;
+  trendLabel?: string;
+  accentClass?: string;
   progress?: number;
 }
 
-function MetricCard({ label, value, subValue, icon: Icon, trend, trendValue, color = "bg-white", progress }: MetricCardProps) {
+function KpiCard({ label, value, sub, icon: Icon, trend, trendLabel, accentClass = 'bg-white', progress }: KpiCardProps) {
   return (
-    <div className={cn("p-4 md:p-5 border border-slate-200 shadow-sm transition-all hover:shadow-md relative overflow-hidden", color)}>
-      <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{label}</p>
-      <div className="flex items-baseline justify-between">
-        <p className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">{value}</p>
+    <div className={cn('p-5 border border-slate-200 shadow-sm hover:shadow-md transition-all relative overflow-hidden', accentClass)}>
+      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{label}</p>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-2xl font-black italic tracking-tight text-slate-900">{value}</p>
         {trend && (
-          <div className={cn(
-            "flex items-center text-[9px] md:text-[10px] font-bold",
-            trend === 'up' ? "text-emerald-600" :
-              trend === 'down' ? "text-rose-600" : "text-slate-500"
-          )}>
-            {trend === 'up' ? <ArrowUpRight size={10} className="mr-0.5" /> : <TrendingDown size={10} className="mr-0.5" />}
-            {trendValue}
-          </div>
+          <span className={cn('text-[9px] font-bold flex items-center gap-0.5',
+            trend === 'up' ? 'text-emerald-600' : trend === 'down' ? 'text-rose-600' : 'text-slate-400')}>
+            {trend === 'up' ? <ArrowUpRight size={10} /> : trend === 'down' ? <TrendingDown size={10} /> : null}
+            {trendLabel}
+          </span>
         )}
       </div>
       {progress !== undefined ? (
-        <div className="w-full bg-slate-100 h-1 md:h-1.5 mt-3 rounded-full overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${progress}%` }}
-            className="bg-amber-500 h-full"
-          />
+        <div className="mt-3 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+          <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(100, progress)}%` }}
+            transition={{ duration: 0.8 }} className="h-full bg-amber-500 rounded-full" />
         </div>
-      ) : subValue ? (
-        <p className="text-[9px] md:text-[10px] text-slate-500 mt-2">{subValue}</p>
+      ) : sub ? (
+        <p className="text-[9px] text-slate-400 mt-1.5 font-medium">{sub}</p>
       ) : null}
-
-      <Icon size={14} className="absolute top-4 right-4 text-slate-100" />
+      <Icon size={32} className="absolute right-3 top-3 text-slate-100" />
     </div>
   );
 }
 
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+
 export default function Dashboard() {
   const { activeHouse } = useHouse();
-  const [chartPeriod, setChartPeriod] = useState<'mingguan' | 'bulanan'>('mingguan');
+  const { getActiveFlockByHouse } = useFlock();
+  const { productionLogs, salesLogs, inventory, mortalityRecords, transactions } = useGlobalData();
 
-  const currentChartData = chartPeriod === 'mingguan' ? data : monthlyData;
+  const [chartPeriod, setChartPeriod] = useState<7 | 14 | 30>(7);
 
-  // Data Mock untuk Metrik Baru
-  const currentHDP = 92.4;
-  const currentFCR = 2.15;
+  const activeBatch = getActiveFlockByHouse(activeHouse?.id || '');
+  const currentCount = activeBatch?.currentCount || 0;
+
+  // ── Age Calculation ──────────────────────────────────────────────────────
+  const ageWeeks = useMemo(() => {
+    if (!activeBatch) return 0;
+    const start = new Date(activeBatch.arrivalDate);
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - start.getTime()) / 86400000);
+    return Math.floor((diffDays + activeBatch.arrivalAgeWeeks * 7) / 7);
+  }, [activeBatch]);
+
+  // ── House Production Logs ────────────────────────────────────────────────
+  const houseLogs = useMemo(() =>
+    productionLogs.filter(p => p.houseId === activeHouse?.id)
+      .sort((a, b) => a.date.localeCompare(b.date)),
+    [productionLogs, activeHouse]);
+
+  // ── Last N Days Chart Data ────────────────────────────────────────────────
+  const chartData = useMemo(() => {
+    return Array.from({ length: chartPeriod }, (_, i) => {
+      const date = getWeekAgo(chartPeriod - 1 - i);
+      const log = houseLogs.find(l => l.date === date);
+      const hdp = log && currentCount > 0 ? (log.eggCount / currentCount) * 100 : null;
+      const standard = getStrainStandardHDP(ageWeeks);
+      return {
+        name: new Date(date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }),
+        day: DAY_LABELS[new Date(date).getDay()],
+        produksi: log ? log.totalKg : null,
+        pakan: log ? log.feedConsumed : null,
+        hdp: hdp ? parseFloat(hdp.toFixed(1)) : null,
+        standar: standard,
+        mortalitas: log ? log.mortality : null,
+      };
+    });
+  }, [houseLogs, chartPeriod, currentCount, ageWeeks]);
+
+  // ── Key Metrics ─────────────────────────────────────────────────────────────
+  const lastLog = houseLogs.at(-1);
+  const standardHDP = getStrainStandardHDP(ageWeeks);
+  const todayHDP = lastLog && currentCount > 0 ? (lastLog.eggCount / currentCount) * 100 : 0;
+
+  const totalFeed = houseLogs.reduce((a, b) => a + b.feedConsumed, 0);
+  const totalEggKg = houseLogs.reduce((a, b) => a + b.totalKg, 0);
+  const cumulativeFCR = totalEggKg > 0 ? totalFeed / totalEggKg : 0;
+
+  const feedIntakePerBird = lastLog && currentCount > 0 ? (lastLog.feedConsumed * 1000) / currentCount : 0;
+
+  const totalMortality = (activeBatch ? (activeBatch as any).initialCount - currentCount : 0);
+  const mortalityPct = activeBatch && (activeBatch as any).initialCount > 0
+    ? (totalMortality / (activeBatch as any).initialCount) * 100 : 0;
+
+  // ── Feed Stock Alert ────────────────────────────────────────────────────────
+  const feedItems = inventory.filter(i => i.type === 'FINISHED_FEED' || i.type === 'RAW_MATERIAL');
+  const lowStockItems = feedItems.filter(i => i.quantity <= i.reorderPoint);
+
+  // ── Revenue from sales ──────────────────────────────────────────────────────
+  const houseSales = salesLogs.filter(s => s.houseId === activeHouse?.id && !s.isFree);
+  const totalRevenue = houseSales.reduce((a, b) => a + b.total, 0);
+  const totalExpenses = transactions.filter(t => t.type === 'EXPENSE').reduce((a, b) => a + b.total, 0);
+  const netPL = totalRevenue - totalExpenses;
+
+  // ── Egg breakdown summary (last log) ──────────────────────────────────────
+  const eggBreakdownData = lastLog ? [
+    { name: 'Normal', value: (lastLog.breakdown[EggCategory.BM] || 0) + (lastLog.breakdown[EggCategory.KRC] || 0) + (lastLog.breakdown[EggCategory.KS] || 0) + (lastLog.breakdown[EggCategory.PELOR] || 0), fill: '#22c55e' },
+    { name: 'Retak', value: (lastLog.breakdown[EggCategory.RETAK] || 0) + (lastLog.breakdown[EggCategory.KRC_RETAK] || 0) + (lastLog.breakdown[EggCategory.KS_RETAK] || 0), fill: '#f59e0b' },
+    { name: 'Pecah', value: (lastLog.breakdown[EggCategory.PECAH] || 0), fill: '#ef4444' },
+  ].filter(d => d.value > 0) : [];
 
   return (
-    <div className="grid grid-cols-12 gap-6 pb-12">
-      {/* KPI Bricks */}
-      <div className="col-span-12 md:col-span-3">
-        <MetricCard
-          label="Hen Day Production (HDP)"
-          value={`${currentHDP}%`}
-          progress={currentHDP}
-          subValue={`Standar Kurva (Umur 32 Mg): 94.5%`}
-          icon={Activity}
-        />
-      </div>
-      <div className="col-span-12 md:col-span-3">
-        <MetricCard
-          label="Feed Conversion Ratio (FCR)"
-          value={currentFCR}
-          subValue="Target Ideal Strain: < 2.10"
-          icon={TrendingUp}
-          trend="down"
-          trendValue="+0.05 dari target"
-        />
-      </div>
-      <div className="col-span-12 md:col-span-3">
-        <MetricCard
-          label="Mortalitas Siklus"
-          value="0.42%"
-          subValue="Batas Standar: 0.50% / Bulan"
-          icon={Skull}
-          trend="down"
-          trendValue="Aman"
-        />
-      </div>
-      <div className="col-span-12 md:col-span-3">
-        <MetricCard
-          label="Stok Pakan Jadi (Mix)"
-          value="1,250 kg"
-          subValue="Estimasi Sisa: 4 Hari"
-          icon={Package}
-          trend="neutral"
-          trendValue="Sesuai Buffer"
-        />
-      </div>
-
-      {/* Charts Section */}
-      <div className="col-span-12 lg:col-span-8 space-y-6">
-        <div className="bg-white border border-slate-200">
-          <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-            <div>
-              <h3 className="font-bold text-sm text-slate-700">Trend Produksi {activeHouse?.name}</h3>
-              <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Statistik & Standar Strain</p>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setChartPeriod('mingguan')}
-                className={cn("px-3 py-1 text-[10px] font-bold uppercase transition-all rounded-sm", chartPeriod === 'mingguan' ? "border border-slate-200 bg-white shadow-sm text-slate-800" : "text-slate-400 hover:text-slate-600")}
-              >
-                Mingguan
-              </button>
-              <button
-                onClick={() => setChartPeriod('bulanan')}
-                className={cn("px-3 py-1 text-[10px] font-bold uppercase transition-all rounded-sm", chartPeriod === 'bulanan' ? "border border-slate-200 bg-white shadow-sm text-slate-800" : "text-slate-400 hover:text-slate-600")}
-              >
-                Bulanan
-              </button>
-            </div>
-          </div>
-          <div className="p-6 h-[320px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={currentChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorProd" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f59eb" stopOpacity={0.1} />
-                    <stop offset="95%" stopColor="#f59eb" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis
-                  dataKey="name"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 10, fill: '#64748b' }}
-                  dy={10}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 10, fill: '#64748b' }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    borderRadius: '4px',
-                    border: '1px solid #e2e8f0',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                    fontSize: '11px'
-                  }}
-                />
-                <Area type="monotone" dataKey="production" stroke="#f59eb" strokeWidth={2} fillOpacity={1} fill="url(#colorProd)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+    <div className="space-y-6 pb-12">
+      {/* House Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-black text-slate-900 uppercase tracking-tighter italic">
+            Dashboard <span className="text-amber-500">{activeHouse?.name}</span>
+          </h1>
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+            {activeBatch
+              ? `${activeBatch.strain} · Umur ${ageWeeks} Minggu · ${currentCount.toLocaleString()} Ekor`
+              : 'Belum ada batch aktif'}
+          </p>
         </div>
-
-        {/* Depreciations Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white border border-slate-200 p-5">
-            <h3 className="font-bold text-sm text-slate-700 mb-4">Dana Peremajaan Ayam</h3>
-            <div className="flex justify-between text-[10px] mb-1 font-bold uppercase tracking-widest text-slate-400">
-              <span>Terakumulasi (Bulan 14/18)</span>
-              <span>77%</span>
-            </div>
-            <div className="w-full bg-slate-100 h-3 border border-slate-200 overflow-hidden mb-2">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: '77%' }}
-                className="bg-emerald-500 h-full"
-              />
-            </div>
-            <div className="flex justify-between items-end mt-4">
-              <p className="text-[10px] text-slate-500 leading-relaxed">
-                Target Restock: {formatCurrency(350000000)}<br />
-                Saldo Saat Ini: {formatCurrency(269500000)}
-              </p>
-              <Target size={24} className="text-slate-100" />
-            </div>
-          </div>
-
-          <div className="bg-white border border-slate-200 p-5">
-            <h3 className="font-bold text-sm text-slate-700 mb-4">Penyusutan Kandang</h3>
-            <div className="flex justify-between text-[10px] mb-1 font-bold uppercase tracking-widest text-slate-400">
-              <span>Periode 1/5 (Tahun 2/10)</span>
-              <span>20%</span>
-            </div>
-            <div className="w-full bg-slate-100 h-3 border border-slate-200 overflow-hidden mb-2">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: '20%' }}
-                className="bg-slate-700 h-full"
-              />
-            </div>
-            <div className="flex justify-between items-end mt-4">
-              <p className="text-[10px] text-slate-500 leading-relaxed">
-                Alokasi Laba Ditahan: Rp 2.5jt/bln<br />
-                Saldo Renovasi: Rp 60.000.000
-              </p>
-              <Package size={24} className="text-slate-100" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Right Column */}
-      <div className="col-span-12 lg:col-span-4 space-y-6">
-        {/* Smart Warning Card */}
-        <div className="bg-slate-900 text-white shadow-xl p-6 relative overflow-hidden border border-slate-800">
-          <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
-            <AlertTriangle size={64} />
-          </div>
-          <h3 className="font-bold text-amber-400 text-[10px] mb-6 uppercase tracking-[0.2em]">Smart Warning System</h3>
-
-          <div className="space-y-6">
-            {/* Alarm Jadwal Biosekuriti */}
-            <div className="flex gap-3 items-start">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 ring-4 ring-emerald-500/20 shrink-0"></div>
-              <div>
-                <p className="text-sm font-bold flex items-center gap-2"><Syringe size={14} className="text-emerald-400" /> Jadwal Biosekuriti</p>
-                <p className="text-xs text-slate-400 mt-1 leading-relaxed">Vaksin ND-IB Live via Air Minum dijadwalkan besok (Umur 32 Minggu). Pastikan puasa air 2 jam sebelum aplikasi.</p>
-              </div>
-            </div>
-
-            {/* Peringatan Formulasi / Stok Bahan Baku */}
-            <div className="flex gap-3 items-start border-t border-slate-800 pt-6">
-              <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 ring-4 ring-amber-500/20 shrink-0"></div>
-              <div>
-                <p className="text-sm font-bold text-amber-400">Stok Raw Material: Jagung</p>
-                <p className="text-xs text-slate-400 mt-1 leading-relaxed">Stok jagung tersisa 800kg. Pembuatan resep ransum "Layer 30+" lusa membutuhkan 1.200kg.</p>
-              </div>
-            </div>
-
-            {/* Peringatan Performa HDP vs Strain Curve */}
-            <div className="flex gap-3 items-start border-t border-slate-800 pt-6">
-              <div className="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1.5 ring-4 ring-rose-500/20 shrink-0"></div>
-              <div>
-                <p className="text-sm font-bold text-rose-400">Penurunan Performa HDP</p>
-                <p className="text-xs text-slate-400 mt-1 leading-relaxed">HDP aktual (92.4%) berada 2.1% di bawah kurva standar Isa Brown. Periksa kualitas premix atau sirkulasi udara.</p>
-              </div>
-            </div>
-
-            <button className="w-full py-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[10px] font-bold uppercase tracking-widest transition-colors mt-2 text-white">
-              KIRIM ALERT KE WHATSAPP
+        <div className="flex items-center gap-2">
+          {[7, 14, 30].map(n => (
+            <button key={n} onClick={() => setChartPeriod(n as any)}
+              className={cn('px-3 py-1.5 text-[9px] font-black uppercase tracking-widest border transition-all',
+                chartPeriod === n ? 'bg-slate-900 text-white border-slate-900' : 'text-slate-400 border-slate-200 hover:border-slate-400')}>
+              {n}H
             </button>
+          ))}
+        </div>
+      </div>
+
+      {/* KPI Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KpiCard
+          label="HDP Hari Ini"
+          value={`${todayHDP.toFixed(1)}%`}
+          sub={`Std ${ageWeeks}mg: ${standardHDP}%`}
+          icon={Activity}
+          progress={todayHDP}
+          trend={todayHDP >= standardHDP ? 'up' : 'down'}
+          trendLabel={todayHDP >= standardHDP ? 'Sesuai Standar' : `−${(standardHDP - todayHDP).toFixed(1)}%`}
+          accentClass={todayHDP >= standardHDP ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}
+        />
+        <KpiCard
+          label="FCR Kumulatif"
+          value={cumulativeFCR.toFixed(2)}
+          sub={`Target: < 2.10 · Feed: ${feedIntakePerBird.toFixed(0)}g/ekor`}
+          icon={TrendingUp}
+          trend={cumulativeFCR < 2.10 ? 'up' : 'down'}
+          trendLabel={cumulativeFCR < 2.10 ? 'Efisien' : 'Di atas target'}
+        />
+        <KpiCard
+          label="Mortalitas Siklus"
+          value={`${mortalityPct.toFixed(2)}%`}
+          sub={`${totalMortality.toLocaleString()} ekor · Batas: 0.5%/bln`}
+          icon={Skull}
+          trend={mortalityPct < 0.5 ? 'up' : 'down'}
+          trendLabel={mortalityPct < 0.5 ? 'Aman' : 'Perhatian!'}
+          accentClass={mortalityPct >= 0.5 ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200'}
+        />
+        <KpiCard
+          label="P&L Siklus"
+          value={formatCurrency(netPL)}
+          sub={`Pendapatan: ${formatCurrency(totalRevenue)}`}
+          icon={DollarSign}
+          trend={netPL > 0 ? 'up' : 'down'}
+          trendLabel={netPL > 0 ? 'Profit' : 'Rugi'}
+          accentClass={netPL > 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}
+        />
+      </div>
+
+      <div className="grid grid-cols-12 gap-6">
+        {/* Main Chart — HDP Trend vs Standard */}
+        <div className="col-span-12 lg:col-span-8 bg-white border border-slate-200 shadow-sm">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div>
+              <h3 className="font-bold text-sm text-slate-700">Tren HDP vs Kurva Standar Strain</h3>
+              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{chartPeriod} Hari Terakhir · {activeHouse?.name}</p>
+            </div>
+            <BarChart3 size={18} className="text-slate-300" />
+          </div>
+          <div className="p-4 h-[300px]">
+            {houseLogs.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gradHDP" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8' }} dy={6} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8' }} domain={[60, 100]} unit="%" />
+                  <Tooltip contentStyle={{ borderRadius: '4px', border: '1px solid #e2e8f0', fontSize: '11px' }} />
+                  <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '8px' }} />
+                  <Area type="monotone" dataKey="hdp" name="HDP Aktual (%)" stroke="#f59e0b" strokeWidth={2} fill="url(#gradHDP)" connectNulls dot={{ r: 3, fill: '#f59e0b' }} />
+                  <Line type="monotone" dataKey="standar" name="Standar Strain (%)" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="6 3" dot={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center">
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Belum ada data produksi untuk grafik</p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Lab Snapshot & Mortalitas */}
-        <div className="bg-white border border-slate-200 p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="font-bold text-sm text-slate-700">Upah Operasional</h3>
-            <span className="text-[9px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 uppercase font-black tracking-widest">Minggu 4</span>
+        {/* Smart Warning Panel */}
+        <div className="col-span-12 lg:col-span-4 bg-slate-900 text-white border border-slate-800 shadow-xl p-6 relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 opacity-[0.06] pointer-events-none">
+            <AlertTriangle size={80} />
           </div>
-          <div className="space-y-4">
-            <div className="flex justify-between text-xs">
-              <span className="text-slate-500">Gaji Reguler (Staff)</span>
-              <span className="font-bold text-slate-800">Rp 1.400.000</span>
+          <h3 className="text-amber-500 text-[9px] font-black uppercase tracking-[0.25em] mb-5 flex items-center gap-2">
+            <Activity size={12} /> Smart Warning System
+          </h3>
+          <div className="space-y-5">
+            {/* HDP Alert */}
+            <div className="flex gap-3 items-start">
+              <div className={cn('w-1.5 h-1.5 rounded-full mt-1.5 ring-4 shrink-0',
+                todayHDP >= standardHDP ? 'bg-emerald-500 ring-emerald-500/20' : 'bg-rose-500 ring-rose-500/20')} />
+              <div>
+                <p className={cn('text-xs font-bold', todayHDP >= standardHDP ? 'text-emerald-400' : 'text-rose-400')}>
+                  {todayHDP >= standardHDP ? '✓ HDP Sesuai Standar' : '⚠ HDP Di Bawah Standar'}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">
+                  {lastLog
+                    ? `Aktual: ${todayHDP.toFixed(1)}% vs Standar: ${standardHDP}% (Umur ${ageWeeks}mg)`
+                    : 'Belum ada data produksi hari ini'}
+                </p>
+              </div>
             </div>
-            <div className="flex justify-between text-xs border-t border-slate-50 pt-4">
-              <span className="text-slate-500">Borongan Giling (1.2t)</span>
-              <span className="font-bold text-slate-800">Rp 420.000</span>
-            </div>
-            <div className="flex justify-between text-xs border-t border-slate-100 pt-4 font-bold">
-              <span className="text-slate-800">Total Minggu Ini</span>
-              <span className="text-amber-600">Rp 1.820.000</span>
+
+            {/* Stock Alert */}
+            {lowStockItems.length > 0 ? (
+              <div className="flex gap-3 items-start border-t border-slate-800 pt-5">
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 ring-4 ring-amber-500/20 shrink-0" />
+                <div>
+                  <p className="text-xs font-bold text-amber-400">⚠ Stok Pakan Menipis</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">
+                    {lowStockItems.map(i => `${i.name}: ${i.quantity.toFixed(0)} ${i.unit}`).join(' · ')}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-3 items-start border-t border-slate-800 pt-5">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 ring-4 ring-emerald-500/20 shrink-0" />
+                <div>
+                  <p className="text-xs font-bold text-emerald-400">✓ Stok Pakan Aman</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Semua bahan baku di atas reorder point</p>
+                </div>
+              </div>
+            )}
+
+            {/* FCR Alert */}
+            <div className="flex gap-3 items-start border-t border-slate-800 pt-5">
+              <div className={cn('w-1.5 h-1.5 rounded-full mt-1.5 ring-4 shrink-0',
+                cumulativeFCR < 2.10 ? 'bg-emerald-500 ring-emerald-500/20' : 'bg-amber-500 ring-amber-500/20')} />
+              <div>
+                <p className={cn('text-xs font-bold', cumulativeFCR < 2.10 ? 'text-emerald-400' : 'text-amber-400')}>
+                  FCR {cumulativeFCR > 0 ? cumulativeFCR.toFixed(2) : '-'} · {cumulativeFCR < 2.10 ? 'Efisien' : 'Di atas target'}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-0.5">Target ideal strain: &lt; 2.10</p>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="p-6 bg-slate-50 border border-slate-200 border-dashed text-center">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Mortalitas Hari Ini</p>
-          <p className="text-3xl font-black italic text-rose-600 mt-1">2 Ekor</p>
-          <p className="text-[10px] text-slate-500 mt-2">{activeHouse?.name} - Penyekat 3</p>
+        {/* Feed vs Production Chart */}
+        <div className="col-span-12 md:col-span-6 lg:col-span-5 bg-white border border-slate-200 shadow-sm">
+          <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+            <h3 className="font-bold text-sm text-slate-700">Konsumsi Pakan vs Produksi Telur</h3>
+            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">kg/hari · {chartPeriod} Hari</p>
+          </div>
+          <div className="p-4 h-[220px]">
+            {houseLogs.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 8, fill: '#94a3b8' }} dy={4} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8' }} />
+                  <Tooltip contentStyle={{ fontSize: '11px', borderRadius: '4px' }} />
+                  <Legend wrapperStyle={{ fontSize: '10px' }} />
+                  <Bar dataKey="pakan" name="Pakan (kg)" fill="#0f172a" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="produksi" name="Telur (kg)" fill="#f59e0b" radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center">
+                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Belum ada data</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Mortality Trend Chart */}
+        <div className="col-span-12 md:col-span-6 lg:col-span-4 bg-white border border-slate-200 shadow-sm">
+          <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
+            <h3 className="font-bold text-sm text-slate-700">Tren Mortalitas Harian</h3>
+            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Ekor/hari</p>
+          </div>
+          <div className="p-4 h-[220px]">
+            {houseLogs.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gradMort" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 8, fill: '#94a3b8' }} dy={4} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#94a3b8' }} />
+                  <Tooltip contentStyle={{ fontSize: '11px', borderRadius: '4px' }} />
+                  <Area type="monotone" dataKey="mortalitas" name="Mortalitas (ekor)" stroke="#ef4444" strokeWidth={2} fill="url(#gradMort)" connectNulls dot={{ r: 3, fill: '#ef4444' }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center">
+                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Belum ada data</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Egg Breakdown Today */}
+        <div className="col-span-12 lg:col-span-3 space-y-4">
+          <div className="bg-white border border-slate-200 p-5 shadow-sm">
+            <h3 className="font-bold text-sm text-slate-700 mb-4 flex items-center gap-2">
+              <Egg size={14} className="text-amber-500" /> Telur Hari Ini
+            </h3>
+            {lastLog && eggBreakdownData.length > 0 ? (
+              <div className="space-y-3">
+                {eggBreakdownData.map(item => (
+                  <div key={item.name}>
+                    <div className="flex justify-between text-[10px] font-bold mb-1">
+                      <span className="text-slate-600">{item.name}</span>
+                      <span style={{ color: item.fill }}>{item.value.toFixed(2)} kg</span>
+                    </div>
+                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${(item.value / (lastLog.totalKg || 1)) * 100}%` }}
+                        transition={{ duration: 0.7 }}
+                        className="h-full rounded-full"
+                        style={{ backgroundColor: item.fill }}
+                      />
+                    </div>
+                  </div>
+                ))}
+                <div className="pt-2 border-t border-slate-100 flex justify-between">
+                  <span className="text-[9px] text-slate-400 font-bold uppercase">Total</span>
+                  <span className="text-[10px] font-black text-slate-900">{lastLog.totalKg.toFixed(2)} kg</span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest text-center py-4">Belum ada produksi hari ini</p>
+            )}
+          </div>
+
+          {/* Flock Stats */}
+          <div className="bg-slate-900 border border-slate-800 p-5 text-white">
+            <h3 className="text-amber-500 text-[9px] font-black uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+              <Flame size={12} /> Status Flock
+            </h3>
+            <div className="space-y-3">
+              {[
+                { label: 'Populasi Aktif', value: currentCount.toLocaleString() + ' ekor' },
+                { label: 'Total Produksi', value: totalEggKg.toFixed(1) + ' kg' },
+                { label: 'Total Pakan', value: totalFeed.toFixed(1) + ' kg' },
+                { label: 'Pendapatan', value: formatCurrency(totalRevenue) },
+              ].map(s => (
+                <div key={s.label} className="flex justify-between">
+                  <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">{s.label}</span>
+                  <span className="text-[10px] text-white font-bold">{s.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -18,7 +18,7 @@ import {
   X,
   Save
 } from 'lucide-react';
-import { EggCategory } from '../types';
+import { ItemType, EggCategory } from '../types';
 import { formatCurrency, getEggCategoryRange, cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import Swal from 'sweetalert2';
@@ -32,7 +32,7 @@ const initialPrices = {
   [EggCategory.PELOR]: 20000,
   [EggCategory.RETAK]: 15000,
   [EggCategory.PECAH]: 5000,
-  'NON_EGG': 5000 // Karung/Kotoran
+  'NON_EGG': 5000
 };
 
 import { useHouse } from '../HouseContext';
@@ -40,24 +40,37 @@ import { useGlobalData } from '../GlobalContext';
 
 export default function Sales() {
   const { activeHouse } = useHouse();
-  const { saveSale, salesLogs } = useGlobalData();
+  const { saveSale, salesLogs, inventory, updateInventory } = useGlobalData();
   const [activeCategory, setActiveCategory] = useState<string>(EggCategory.BM);
   const [quantity, setQuantity] = useState(0);
   const [isFree, setIsFree] = useState(false);
-  const [buyerType, setBuyerType] = useState('REGAULAR'); // REGULAR, WASTE, FREE
+  const [customerName, setCustomerName] = useState('');
+  const [buyerType, setBuyerType] = useState('REGULAR');
 
   const [prices, setPrices] = useState(initialPrices);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [tempPrices, setTempPrices] = useState(initialPrices);
 
+  // ── Egg Stock Lookup ─────────────────────────────────────────────────────────
+  // Find the EGG_STOCK inventory item for the currently selected category
+  const eggStockItem = inventory.find(
+    i => i.type === ItemType.EGG_STOCK && i.eggCategory === activeCategory
+  );
+  const availableStock = eggStockItem ? eggStockItem.quantity : null; // null = no EGG_STOCK tracking (e.g. NON_EGG)
+  const isOverStock = availableStock !== null && quantity > availableStock && !isFree;
+
   const totalPrice = isFree ? 0 : quantity * (prices[activeCategory as keyof typeof prices] || 0);
 
   const handleCompleteTransaction = () => {
     if (quantity <= 0) {
+      Swal.fire({ title: 'Input Invalid', text: 'Jumlah unit harus lebih dari 0.', icon: 'warning', confirmButtonColor: '#0f172a' });
+      return;
+    }
+    if (isOverStock) {
       Swal.fire({
-        title: 'Input Invalid',
-        text: 'Jumlah unit harus lebih dari 0.',
-        icon: 'warning',
+        title: 'Stok Tidak Cukup!',
+        html: `<div class="text-sm"><p>Stok <b>${activeCategory}</b> tersedia: <b>${availableStock?.toFixed(2)} kg</b></p><p>Jumlah yang diinput: <b>${quantity} kg</b></p><p class="text-red-500 mt-2 font-bold">Tidak dapat menjual melebihi stok yang tersedia.</p></div>`,
+        icon: 'error',
         confirmButtonColor: '#0f172a',
       });
       return;
@@ -91,17 +104,18 @@ export default function Sales() {
             price: prices[activeCategory as keyof typeof prices] || 0,
             total: totalPrice,
             isFree,
-            customer: 'Umum' // Bisa ditambahkan input customer jika perlu
+            customer: customerName.trim() || 'Umum'
         });
 
-        Swal.fire({
-          title: 'Transaksi Berhasil!',
-          text: 'Data penjualan telah dicatat.',
-          icon: 'success',
-          confirmButtonColor: '#0f172a',
-        });
+        // Deduct from EGG_STOCK inventory
+        if (eggStockItem) {
+          updateInventory(eggStockItem.id, -quantity);
+        }
+
+        Swal.fire({ title: 'Transaksi Berhasil!', text: `Penjualan ${quantity} kg ${activeCategory} berhasil dicatat.`, icon: 'success', confirmButtonColor: '#0f172a' });
         setQuantity(0);
         setIsFree(false);
+        setCustomerName('');
       }
     });
   };
@@ -195,26 +209,55 @@ export default function Sales() {
                 </div>
               </div>
 
-              <div className="space-y-6">
+              <div className="space-y-4">
+                {/* Quantity input with stock badge */}
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-3">Jumlah (kg / papan)</label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Jumlah (kg / papan)</label>
+                    {availableStock !== null && (
+                      <span className={cn('text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border rounded-sm',
+                        isOverStock ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200')}>
+                        Stok: {availableStock.toFixed(2)} kg
+                      </span>
+                    )}
+                  </div>
                   <div className="relative">
-                    <input 
+                    <input
                       type="number"
                       placeholder="0.00"
                       value={quantity || ''}
                       onChange={(e) => setQuantity(Number(e.target.value))}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-sm px-5 py-5 text-2xl font-black italic focus:outline-none focus:border-amber-500 transition-all font-mono shadow-inner"
+                      className={cn(
+                        "w-full bg-slate-50 border rounded-sm px-5 py-5 text-2xl font-black italic focus:outline-none transition-all font-mono shadow-inner",
+                        isOverStock ? "border-rose-400 focus:border-rose-500 bg-rose-50" : "border-slate-200 focus:border-amber-500"
+                      )}
                     />
                     <span className="absolute right-6 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Unit</span>
                   </div>
+                  {isOverStock && (
+                    <p className="text-[10px] text-rose-600 font-bold mt-1 flex items-center gap-1">
+                      ⚠ Melebihi stok tersedia ({availableStock?.toFixed(2)} kg)
+                    </p>
+                  )}
                 </div>
 
-                <div className="bg-slate-900 p-6 text-white shadow-xl relative overflow-hidden border border-slate-800">
+                {/* Customer name */}
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Nama Pembeli</label>
+                  <input
+                    type="text"
+                    placeholder="Opsional (misal: Pak Budi)"
+                    value={customerName}
+                    onChange={e => setCustomerName(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-medium focus:outline-none focus:border-amber-500 transition-all"
+                  />
+                </div>
+
+                <div className="bg-slate-900 p-5 text-white shadow-xl relative overflow-hidden border border-slate-800">
                     <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none transform translate-x-4 -translate-y-4">
                         <DollarSign size={80} />
                     </div>
-                    <div className="flex justify-between items-center mb-4">
+                    <div className="flex justify-between items-center mb-3">
                         <span className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em]">Kalkulasi Harga</span>
                         <div className="px-2 py-0.5 bg-slate-800 rounded-sm text-[8px] font-bold uppercase border border-slate-700 tracking-tighter">Real-time Est.</div>
                     </div>
@@ -227,12 +270,18 @@ export default function Sales() {
                     </p>
                 </div>
 
-                <button 
+                <button
                   onClick={handleCompleteTransaction}
-                  className="w-full bg-slate-900 text-white rounded-sm py-5 font-bold text-[10px] uppercase tracking-[0.25em] shadow-xl hover:bg-slate-800 active:scale-[0.98] transition-all flex items-center justify-center space-x-2 border border-slate-800 group"
+                  disabled={isOverStock}
+                  className={cn(
+                    "w-full rounded-sm py-5 font-bold text-[10px] uppercase tracking-[0.25em] shadow-xl active:scale-[0.98] transition-all flex items-center justify-center space-x-2 border group",
+                    isOverStock
+                      ? "bg-slate-200 text-slate-400 border-slate-200 cursor-not-allowed"
+                      : "bg-slate-900 text-white border-slate-800 hover:bg-slate-800"
+                  )}
                 >
-                  <Plus size={16} className="group-hover:text-amber-500 transition-colors" />
-                  <span>Selesaikan Transaksi</span>
+                  <Plus size={16} className={cn("transition-colors", !isOverStock && "group-hover:text-amber-500")} />
+                  <span>{isOverStock ? 'Stok Tidak Mencukupi' : 'Selesaikan Transaksi'}</span>
                 </button>
               </div>
             </div>

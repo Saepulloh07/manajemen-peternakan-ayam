@@ -9,17 +9,26 @@ import Swal from 'sweetalert2';
 import { cn } from '../lib/utils';
 import Modal from '../components/Modal';
 import { useGlobalData } from '../GlobalContext';
-import { FeedRecipe, RecipeIngredient } from '../types';
+import { FeedRecipe, RecipeIngredient, ItemType } from '../types';
 
 export default function FeedFormulation() {
     const { inventory, updateInventory, recipes, addRecipe, updateRecipe, deleteRecipe } = useGlobalData();
     const [selectedRecipeId, setSelectedRecipeId] = useState(recipes.length > 0 ? recipes[0].id : '');
-    const [targetProductionKg, setTargetProductionKg] = useState<number>(1000); 
+    const [targetProductionKg, setTargetProductionKg] = useState<number>(1000);
+    const [outputItemId, setOutputItemId] = useState(''); // which FINISHED_FEED to add to
 
     // Modal States
     const [isMasterModalOpen, setIsMasterModalOpen] = useState(false);
     const [isEditingFormOpen, setIsEditingFormOpen] = useState(false);
     const [currentEditingRecipe, setCurrentEditingRecipe] = useState<FeedRecipe | null>(null);
+
+    // Finished feed items for output selector
+    const finishedFeedItems = useMemo(() =>
+        inventory.filter(i => i.type === ItemType.FINISHED_FEED), [inventory]);
+
+    // Raw materials only for ingredient dropdown
+    const rawMaterialItems = useMemo(() =>
+        inventory.filter(i => i.type === ItemType.RAW_MATERIAL), [inventory]);
 
     const activeRecipe = useMemo(() =>
         recipes.find(r => r.id === selectedRecipeId) || recipes[0],
@@ -29,15 +38,16 @@ export default function FeedFormulation() {
     const formulationDetails = useMemo(() => {
         if (!activeRecipe || !targetProductionKg) return [];
 
-        return activeRecipe.ingredients.map(ing => {
+        return activeRecipe.ingredients.map((ing: any) => {
             const neededKg = (ing.percentage / 100) * targetProductionKg;
             const inventoryItem = inventory.find(item => item.id === ing.inventoryItemId);
-            const currentStock = inventoryItem ? inventoryItem.stock : 0;
+            const currentStock = inventoryItem ? inventoryItem.quantity : 0;   // ← FIX: was .stock
             const isEnough = currentStock >= neededKg;
 
             return {
-                ...ing,
-                name: inventoryItem?.name || 'Unknown',
+                inventoryItemId: ing.inventoryItemId,
+                percentage: ing.percentage,
+                name: inventoryItem?.name || `Unknown (${ing.inventoryItemId})`,
                 neededKg,
                 currentStock,
                 isEnough
@@ -45,7 +55,7 @@ export default function FeedFormulation() {
         });
     }, [activeRecipe, targetProductionKg, inventory]);
 
-    const canProcess = formulationDetails.every(detail => detail.isEnough) && targetProductionKg > 0;
+    const canProcess = formulationDetails.length > 0 && formulationDetails.every(d => d.isEnough) && targetProductionKg > 0;
 
     const handleProcessMixing = () => {
         if (!canProcess) {
@@ -76,16 +86,17 @@ export default function FeedFormulation() {
             cancelButtonText: 'Batal',
         }).then((result) => {
             if (result.isConfirmed) {
-                // UPDATE INVENTORY
-                // 1. Reduce Raw Materials
+                // FIX #3: Identify output FINISHED_FEED item by ItemType, not name
+                const effectiveOutputId = outputItemId || activeRecipe?.outputInventoryItemId || finishedFeedItems[0]?.id;
+
+                // 1. Deduct raw material stocks
                 formulationDetails.forEach(detail => {
                     updateInventory(detail.inventoryItemId, -detail.neededKg);
                 });
 
-                // 2. Increase Finished Feed (Mix)
-                const finishedFeedItem = inventory.find(i => i.name.toLowerCase().includes('pakan jadi'));
-                if (finishedFeedItem) {
-                    updateInventory(finishedFeedItem.id, targetProductionKg);
+                // 2. Increment the FINISHED_FEED item
+                if (effectiveOutputId) {
+                    updateInventory(effectiveOutputId, targetProductionKg);
                 }
 
                 Swal.fire({
@@ -142,6 +153,20 @@ export default function FeedFormulation() {
                                 />
                                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 uppercase">Kilogram</span>
                             </div>
+                        </div>
+
+                        <div>
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Output: Pakan Jadi</label>
+                            <select
+                                value={outputItemId || activeRecipe?.outputInventoryItemId || finishedFeedItems[0]?.id || ''}
+                                onChange={(e) => setOutputItemId(e.target.value)}
+                                className="w-full bg-emerald-50 border border-emerald-200 rounded-sm px-4 py-3 text-sm font-bold text-emerald-800 focus:outline-none focus:border-emerald-400"
+                            >
+                                {finishedFeedItems.length === 0 && <option value="">-- Tidak ada item FINISHED_FEED --</option>}
+                                {finishedFeedItems.map(item => (
+                                    <option key={item.id} value={item.id}>{item.name} ({item.quantity} {item.unit})</option>
+                                ))}
+                            </select>
                         </div>
 
                         <div className="bg-slate-50 p-4 border border-dashed border-slate-300 rounded-sm">

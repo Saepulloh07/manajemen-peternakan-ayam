@@ -23,6 +23,16 @@ import Swal from 'sweetalert2';
 
 import { useHouse } from '../HouseContext';
 import { useGlobalData } from '../GlobalContext';
+import { ItemType } from '../types';
+
+const ITEM_TYPE_LABELS: Record<string, string> = {
+  ALL: 'Semua',
+  [ItemType.RAW_MATERIAL]:  'Bahan Baku',
+  [ItemType.FINISHED_FEED]: 'Pakan Jadi',
+  [ItemType.EGG_STOCK]:     'Stok Telur',
+  [ItemType.MEDICINE]:      'Obat/Vaksin',
+  [ItemType.OTHER]:         'Lainnya',
+};
 
 export default function Inventory() {
   const { activeHouse } = useHouse();
@@ -30,9 +40,14 @@ export default function Inventory() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
-  const [newItem, setNewItem] = useState({ id: '', name: '', quantity: 0, unit: 'kg', price: 0 });
+  const [activeTypeFilter, setActiveTypeFilter] = useState<string>('ALL');
+  const [newItem, setNewItem] = useState({ id: '', name: '', quantity: 0, unit: 'kg', price: 0, type: ItemType.RAW_MATERIAL });
 
-  const stockItems = inventory;
+  const eggStockItems = inventory.filter(i => i.type === ItemType.EGG_STOCK);
+  const nonEggItems = inventory.filter(i => i.type !== ItemType.EGG_STOCK);
+  const filteredItems = activeTypeFilter === 'ALL'
+    ? nonEggItems
+    : nonEggItems.filter(i => i.type === activeTypeFilter);
 
   const handleAddStock = (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,15 +72,17 @@ export default function Inventory() {
     }).then((result) => {
       if (result.isConfirmed) {
         // Update Inventory
-        const targetItem = inventory.find(i => i.name.toLowerCase() === newItem.name.toLowerCase());
+        const targetItem = inventory.find(i => i.name.toLowerCase() === newItem.name.toLowerCase() && i.type !== ItemType.EGG_STOCK);
         if (targetItem) {
             updateInventory(targetItem.id, newItem.quantity);
         } else {
             addInventoryItem({
                 name: newItem.name,
-                stock: newItem.quantity,
+                quantity: newItem.quantity,
+                type: newItem.type,
                 unit: newItem.unit,
-                minStock: 100 // Default min stock
+                reorderPoint: 100,
+                lastPrice: newItem.price,
             });
         }
 
@@ -88,7 +105,7 @@ export default function Inventory() {
           confirmButtonColor: '#0f172a',
         });
         setIsModalOpen(false);
-        setNewItem({ id: '', name: '', quantity: 0, unit: 'kg', price: 0 });
+        setNewItem({ id: '', name: '', quantity: 0, unit: 'kg', price: 0, type: ItemType.RAW_MATERIAL });
       }
     });
   };
@@ -151,7 +168,21 @@ export default function Inventory() {
                 <option value="btl">BOTOL</option>
               </select>
             </div>
-            <div className="col-span-2">
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Tipe Item</label>
+            <select
+              value={newItem.type}
+              onChange={(e) => setNewItem({ ...newItem, type: e.target.value as any })}
+              className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500"
+            >
+              <option value={ItemType.RAW_MATERIAL}>Bahan Baku (RAW_MATERIAL)</option>
+              <option value={ItemType.FINISHED_FEED}>Pakan Jadi (FINISHED_FEED)</option>
+              <option value={ItemType.MEDICINE}>Obat-obatan</option>
+              <option value={ItemType.VACCINE}>Vaksin</option>
+              <option value={ItemType.OTHER}>Lainnya</option>
+            </select>
+          </div>
+          <div className="col-span-2">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Harga Satuan (Est.)</label>
                 <input 
                     type="number"
@@ -182,7 +213,7 @@ export default function Inventory() {
         </form>
       </Modal>
 
-      {stockItems.some(i => i.quantity <= i.minStock) && (
+      {inventory.some(i => i.quantity <= i.reorderPoint && i.type !== ItemType.EGG_STOCK) && (
         <motion.div 
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -205,12 +236,31 @@ export default function Inventory() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
+
+            {/* Filter Tabs */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {['ALL', ItemType.RAW_MATERIAL, ItemType.FINISHED_FEED, ItemType.MEDICINE, ItemType.OTHER].map(type => (
+                <button
+                  key={type}
+                  onClick={() => setActiveTypeFilter(type)}
+                  className={cn(
+                    'px-3 py-1.5 text-[9px] font-black uppercase tracking-widest border transition-all',
+                    activeTypeFilter === type
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-white text-slate-400 border-slate-200 hover:border-slate-400'
+                  )}
+                >
+                  {ITEM_TYPE_LABELS[type]}
+                </button>
+              ))}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {stockItems.map((item) => (
+                {filteredItems.map((item) => (
                     <div key={item.id} className="bg-white p-6 border border-slate-200 shadow-sm relative overflow-hidden flex flex-col justify-between h-56">
                         <div className={cn(
                             "absolute top-0 right-0 w-1.5 h-full",
-                            item.quantity <= item.minStock ? "bg-amber-500" : "bg-slate-100"
+                            item.quantity <= item.reorderPoint ? "bg-amber-500" : "bg-slate-100"
                         )} />
                         
                         <div>
@@ -220,20 +270,20 @@ export default function Inventory() {
                                 </div>
                                 <div className="flex items-center space-x-1 text-slate-400">
                                     <Clock size={12} />
-                                    <span className="text-[9px] font-bold uppercase tracking-[0.2em]">{item.leadTime}</span>
+                                    <span className="text-[9px] font-bold uppercase tracking-[0.2em]">-</span>
                                 </div>
                             </div>
                             <h3 className="font-bold text-slate-800 text-base uppercase tracking-tight">{item.name}</h3>
-                            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">{activeHouse?.name} / SKU: {item.id}</p>
+                            <p className="text-slate-400 text-[9px] font-bold uppercase tracking-widest mt-1">{ITEM_TYPE_LABELS[item.type] || item.type} · SKU: {item.id.slice(-4)}</p>
                         </div>
 
                         <div className="flex items-end justify-between">
                             <div className="flex items-baseline space-x-2">
                                 <span className={cn(
                                     "text-4xl font-black italic tracking-tighter",
-                                    item.stock <= item.minStock ? "text-amber-600" : "text-slate-900"
+                                    item.quantity <= item.reorderPoint ? "text-amber-600" : "text-slate-900"
                                 )}>
-                                    {item.stock}
+                                    {item.quantity.toFixed(item.unit === 'kg' ? 1 : 0)}
                                 </span>
                                 <span className="text-slate-400 font-bold text-[10px] uppercase">{item.unit}</span>
                             </div>
@@ -357,15 +407,15 @@ export default function Inventory() {
             <div>
                 <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Stok Saat Ini ({editingItem?.unit})</label>
                 <div className="flex items-center gap-4">
-                    <input 
+                <input 
                         type="number"
-                        value={editingItem?.stock || 0}
-                        onChange={(e) => setEditingItem({ ...editingItem, stock: Number(e.target.value) })}
+                        value={editingItem?.quantity || 0}
+                        onChange={(e) => setEditingItem({ ...editingItem, quantity: Number(e.target.value) })}
                         className="flex-1 bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500 font-mono"
                     />
                     <button 
                         onClick={() => {
-                            updateInventory(editingItem.id, editingItem.stock - inventory.find((i: any) => i.id === editingItem.id)!.stock);
+                            updateInventory(editingItem.id, editingItem.quantity - inventory.find((i: any) => i.id === editingItem.id)!.quantity);
                             setIsEditModalOpen(false);
                             Swal.fire({ title: 'Berhasil', text: 'Stok telah diperbarui secara manual.', icon: 'success' });
                         }}
@@ -378,6 +428,24 @@ export default function Inventory() {
             </div>
         </div>
       </Modal>
+
+      {/* Egg Stock Section */}
+      {eggStockItems.length > 0 && eggStockItems.some(i => i.quantity > 0) && (
+        <div className="mt-8">
+          <h2 className="text-sm font-black uppercase tracking-tight text-slate-700 mb-4 flex items-center gap-2">
+            <span className="w-2 h-4 bg-amber-500 inline-block rounded-sm"></span>
+            Stok Telur Gudang — Auto-Updated dari Input Produksi
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {eggStockItems.filter(i => i.quantity > 0).map(item => (
+              <div key={item.id} className="bg-amber-50 border border-amber-200 p-4 shadow-sm">
+                <p className="text-[9px] font-black uppercase tracking-widest text-amber-600">{item.eggCategory || item.name}</p>
+                <p className="text-3xl font-black italic text-slate-900 mt-1">{item.quantity.toFixed(1)}<span className="text-sm font-bold text-slate-400 ml-1">kg</span></p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

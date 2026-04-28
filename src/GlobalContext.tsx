@@ -1,207 +1,355 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { EggCategory } from './types';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import {
+  EggCategory,
+  ItemType,
+  MortalityCause,
+  type InventoryItem,
+  type MortalityRecord,
+  type FlockAnalytics,
+  type FarmSettings,
+  DEFAULT_FARM_SETTINGS,
+} from './types';
+
+// ─── Interfaces ──────────────────────────────────────────────────────────────
 
 export interface ProductionLog {
-    id: string;
-    houseId: string;
-    date: string;
-    eggCount: number;
-    feedConsumed: number;
-    mortality: number;
-    discardedEggs: number;
-    breakdown: Record<string, number>; // Category -> Kg
-    totalKg: number;
+  id: string;
+  houseId: string;
+  date: string;
+  eggCount: number;
+  feedConsumed: number;          // kg
+  feedInventoryItemId: string;   // which inventory item was consumed
+  mortality: number;
+  mortalityCause?: MortalityCause;
+  discardedEggs: number;
+  breakdown: Record<string, number>; // EggCategory → kg
+  totalKg: number;
+  inputTime?: string;            // ISO datetime when record was submitted
+  inputBy?: string;              // user name who submitted
 }
 
 export interface SalesLog {
-    id: string;
-    houseId: string;
-    date: string;
-    category: string;
-    quantity: number; // Unit (butir/kg/sak)
-    price: number;
-    total: number;
-    isFree: boolean;
-    customer: string;
+  id: string;
+  houseId: string;
+  date: string;
+  category: string;
+  quantity: number;
+  price: number;
+  total: number;
+  isFree: boolean;
+  customer: string;
 }
 
 export interface FinancialTransaction {
-    id: string;
-    date: string;
-    description: string;
-    qty: string;
-    price: number;
-    total: number;
-    account: string;
-    type: 'INCOME' | 'EXPENSE' | 'MODAL';
-    category?: string;
+  id: string;
+  date: string;
+  description: string;
+  qty: string;
+  price: number;
+  total: number;
+  account: string;
+  type: 'INCOME' | 'EXPENSE' | 'MODAL';
+  category?: string;
 }
 
-export interface InventoryItem {
-    id: string;
-    name: string;
-    stock: number;
-    unit: string;
-    minStock: number;
-}
+// Re-export InventoryItem so consumers can import from GlobalContext
+export type { InventoryItem };
+
+// ─── Default Inventory Data ───────────────────────────────────────────────────
+
+const DEFAULT_INVENTORY: InventoryItem[] = [
+  // Raw Materials
+  { id: 'inv-rm-1', name: 'Jagung Giling',        type: ItemType.RAW_MATERIAL,  quantity: 1500, unit: 'kg', reorderPoint: 200, lastPrice: 4500 },
+  { id: 'inv-rm-2', name: 'Bekatul (Dedak)',       type: ItemType.RAW_MATERIAL,  quantity: 800,  unit: 'kg', reorderPoint: 150, lastPrice: 2800 },
+  { id: 'inv-rm-3', name: 'Konsentrat Layer',      type: ItemType.RAW_MATERIAL,  quantity: 600,  unit: 'kg', reorderPoint: 250, lastPrice: 12000 },
+  { id: 'inv-rm-4', name: 'Bungkil Kedelai (SBM)', type: ItemType.RAW_MATERIAL,  quantity: 400,  unit: 'kg', reorderPoint: 100, lastPrice: 9000 },
+  // Finished Feed
+  { id: 'inv-ff-1', name: 'Pakan Jadi Layer Mix',  type: ItemType.FINISHED_FEED, quantity: 0,    unit: 'kg', reorderPoint: 500, lastPrice: 0 },
+  // Egg Stock — one per category
+  { id: 'inv-egg-BM',       name: 'Stok Telur BM',        type: ItemType.EGG_STOCK, quantity: 0, unit: 'kg', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.BM },
+  { id: 'inv-egg-KRC',      name: 'Stok Telur KRC',       type: ItemType.EGG_STOCK, quantity: 0, unit: 'kg', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.KRC },
+  { id: 'inv-egg-KS',       name: 'Stok Telur KS',        type: ItemType.EGG_STOCK, quantity: 0, unit: 'kg', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.KS },
+  { id: 'inv-egg-PELOR',    name: 'Stok Telur Pelor',     type: ItemType.EGG_STOCK, quantity: 0, unit: 'kg', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.PELOR },
+  { id: 'inv-egg-RETAK',    name: 'Stok Telur Retak',     type: ItemType.EGG_STOCK, quantity: 0, unit: 'kg', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.RETAK },
+  { id: 'inv-egg-PECAH',    name: 'Stok Telur Pecah',     type: ItemType.EGG_STOCK, quantity: 0, unit: 'kg', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.PECAH },
+  { id: 'inv-egg-KRC_RETAK',name: 'Stok Telur KRC Retak', type: ItemType.EGG_STOCK, quantity: 0, unit: 'kg', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.KRC_RETAK },
+  { id: 'inv-egg-KS_RETAK', name: 'Stok Telur KS Retak',  type: ItemType.EGG_STOCK, quantity: 0, unit: 'kg', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.KS_RETAK },
+  // Medicine
+  { id: 'inv-med-1', name: 'Vitamin C',           type: ItemType.MEDICINE, quantity: 10,  unit: 'botol', reorderPoint: 2, lastPrice: 25000 },
+  { id: 'inv-med-2', name: 'Vaksin Newcastle',    type: ItemType.VACCINE,  quantity: 5,   unit: 'vial',  reorderPoint: 1, lastPrice: 75000 },
+];
+
+const DEFAULT_RECIPES = [
+  {
+    id: 'rcp-1',
+    name: 'Ransum Layer Umur 30–50 Minggu',
+    targetFcr: 2.10,
+    outputInventoryItemId: 'inv-ff-1',
+    ingredients: [
+      { inventoryItemId: 'inv-rm-1', percentage: 50 },
+      { inventoryItemId: 'inv-rm-2', percentage: 18 },
+      { inventoryItemId: 'inv-rm-3', percentage: 30 },
+      { inventoryItemId: 'inv-rm-4', percentage: 2 },
+    ],
+  },
+];
+
+// ─── Context Type ─────────────────────────────────────────────────────────────
 
 interface GlobalContextType {
-    productionLogs: ProductionLog[];
-    salesLogs: SalesLog[];
-    transactions: FinancialTransaction[];
-    inventory: InventoryItem[];
-    
-    // Actions
-    saveProduction: (log: Omit<ProductionLog, 'id'>) => void;
-    saveSale: (sale: Omit<SalesLog, 'id'>) => void;
-    addTransaction: (tx: Omit<FinancialTransaction, 'id'>) => void;
-    updateInventory: (id: string, delta: number) => void;
-    addInventoryItem: (item: Omit<InventoryItem, 'id'>) => void;
-    
-    // Recipes
-    recipes: any[]; // Use any or define interface
-    addRecipe: (recipe: any) => void;
-    updateRecipe: (id: string, updates: any) => void;
-    deleteRecipe: (id: string) => void;
+  // State
+  productionLogs: ProductionLog[];
+  salesLogs: SalesLog[];
+  transactions: FinancialTransaction[];
+  inventory: InventoryItem[];
+  mortalityRecords: MortalityRecord[];
+  recipes: any[];
+
+  // Actions
+  saveProduction: (log: Omit<ProductionLog, 'id'>) => void;
+  saveSale: (sale: Omit<SalesLog, 'id'>) => void;
+  addTransaction: (tx: Omit<FinancialTransaction, 'id'>) => void;
+  updateInventory: (id: string, delta: number) => void;
+  addInventoryItem: (item: Omit<InventoryItem, 'id'>) => void;
+  updateInventoryItem: (id: string, updates: Partial<InventoryItem>) => void;
+  addRecipe: (recipe: any) => void;
+  updateRecipe: (id: string, updates: any) => void;
+  deleteRecipe: (id: string) => void;
+
+  // Computed Analytics helpers
+  getHDP: (houseId: string, date: string, currentCount: number) => number;
+  getCumulativeFCR: (houseId: string) => number;
+  getFeedIntakePerBird: (houseId: string, currentCount: number) => number;
+  getFlockAnalytics: (houseId: string, currentCount: number) => FlockAnalytics;
+
+  // Farm Settings
+  farmSettings: FarmSettings;
+  saveFarmSettings: (settings: Partial<FarmSettings>) => void;
+  addModalAwal: (amount: number, description?: string) => void;
 }
 
 const GlobalContext = createContext<GlobalContextType | undefined>(undefined);
 
+// ─── Provider ─────────────────────────────────────────────────────────────────
+
 export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    // --- LOAD INITIAL DATA ---
-    const [productionLogs, setProductionLogs] = useState<ProductionLog[]>(() => {
-        const saved = localStorage.getItem('poultry_prod_logs');
-        return saved ? JSON.parse(saved) : [];
+  const [productionLogs, setProductionLogs] = useState<ProductionLog[]>(() => {
+    const s = localStorage.getItem('poultry_prod_logs');
+    return s ? JSON.parse(s) : [];
+  });
+  const [salesLogs, setSalesLogs] = useState<SalesLog[]>(() => {
+    const s = localStorage.getItem('poultry_sales_logs');
+    return s ? JSON.parse(s) : [];
+  });
+  const [transactions, setTransactions] = useState<FinancialTransaction[]>(() => {
+    const s = localStorage.getItem('poultry_transactions');
+    return s ? JSON.parse(s) : [
+      { id: 'tx-init-1', date: '2026-03-01', description: 'Modal Awal', qty: '1', price: 250000000, total: 250000000, account: 'Mandiri', type: 'MODAL' },
+    ];
+  });
+  const [inventory, setInventory] = useState<InventoryItem[]>(() => {
+    const s = localStorage.getItem('poultry_inventory_v2');
+    return s ? JSON.parse(s) : DEFAULT_INVENTORY;
+  });
+  const [mortalityRecords, setMortalityRecords] = useState<MortalityRecord[]>(() => {
+    const s = localStorage.getItem('poultry_mortality');
+    return s ? JSON.parse(s) : [];
+  });
+  const [recipes, setRecipes] = useState<any[]>(() => {
+    const s = localStorage.getItem('poultry_recipes');
+    return s ? JSON.parse(s) : DEFAULT_RECIPES;
+  });
+  const [farmSettings, setFarmSettings] = useState<FarmSettings>(() => {
+    const s = localStorage.getItem('poultry_farm_settings');
+    return s ? { ...DEFAULT_FARM_SETTINGS, ...JSON.parse(s) } : DEFAULT_FARM_SETTINGS;
+  });
+
+  // Persistence
+  useEffect(() => { localStorage.setItem('poultry_prod_logs', JSON.stringify(productionLogs)); }, [productionLogs]);
+  useEffect(() => { localStorage.setItem('poultry_sales_logs', JSON.stringify(salesLogs)); }, [salesLogs]);
+  useEffect(() => { localStorage.setItem('poultry_transactions', JSON.stringify(transactions)); }, [transactions]);
+  useEffect(() => { localStorage.setItem('poultry_inventory_v2', JSON.stringify(inventory)); }, [inventory]);
+  useEffect(() => { localStorage.setItem('poultry_mortality', JSON.stringify(mortalityRecords)); }, [mortalityRecords]);
+  useEffect(() => { localStorage.setItem('poultry_recipes', JSON.stringify(recipes)); }, [recipes]);
+  useEffect(() => { localStorage.setItem('poultry_farm_settings', JSON.stringify(farmSettings)); }, [farmSettings]);
+
+  // ─── Actions ───────────────────────────────────────────────────────────────
+
+  const updateInventory = (id: string, delta: number) => {
+    setInventory(prev => prev.map(item =>
+      item.id === id ? { ...item, quantity: Math.max(0, item.quantity + delta) } : item
+    ));
+  };
+
+  const addInventoryItem = (itemData: Omit<InventoryItem, 'id'>) => {
+    setInventory(prev => [...prev, { ...itemData, id: `inv-${Date.now()}` }]);
+  };
+
+  const updateInventoryItem = (id: string, updates: Partial<InventoryItem>) => {
+    setInventory(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
+  };
+
+  const addTransaction = (txData: Omit<FinancialTransaction, 'id'>) => {
+    setTransactions(prev => [...prev, { ...txData, id: `tx-${Date.now()}` }]);
+  };
+
+  /** FIX #1 + #2 + #4: saveProduction now deducts feed, increments egg stock, and logs mortality */
+  const saveProduction = (logData: Omit<ProductionLog, 'id'>) => {
+    const newLog = { ...logData, id: `prod-${Date.now()}` };
+    setProductionLogs(prev => [...prev, newLog]);
+
+    // FIX #1: Deduct the selected feed inventory item
+    if (logData.feedInventoryItemId && logData.feedConsumed > 0) {
+      updateInventory(logData.feedInventoryItemId, -logData.feedConsumed);
+    }
+
+    // FIX #2: Auto-increment each egg category stock
+    Object.entries(logData.breakdown).forEach(([category, kg]) => {
+      if (kg > 0) {
+        setInventory(prev => prev.map(item => {
+          if (item.type === ItemType.EGG_STOCK && item.eggCategory === category) {
+            return { ...item, quantity: item.quantity + kg };
+          }
+          return item;
+        }));
+      }
     });
 
-    const [salesLogs, setSalesLogs] = useState<SalesLog[]>(() => {
-        const saved = localStorage.getItem('poultry_sales_logs');
-        return saved ? JSON.parse(saved) : [];
-    });
+    // FIX #4: Save mortality record if applicable
+    if (logData.mortality > 0) {
+      const mortalityRecord: MortalityRecord = {
+        id: `mort-${Date.now()}`,
+        houseId: logData.houseId,
+        date: logData.date,
+        count: logData.mortality,
+        cause: logData.mortalityCause || MortalityCause.OTHER,
+        productionLogId: newLog.id,
+      };
+      setMortalityRecords(prev => [...prev, mortalityRecord]);
+    }
+  };
 
-    const [transactions, setTransactions] = useState<FinancialTransaction[]>(() => {
-        const saved = localStorage.getItem('poultry_transactions');
-        return saved ? JSON.parse(saved) : [
-            { id: 'tx-init-1', date: '2026-03-01', description: 'Modal Awal', qty: '1', price: 250000000, total: 250000000, account: 'Mandiri', type: 'MODAL' }
-        ];
-    });
+  const saveSale = (saleData: Omit<SalesLog, 'id'>) => {
+    const newSale = { ...saleData, id: `sale-${Date.now()}` };
+    setSalesLogs(prev => [...prev, newSale]);
 
-    const [inventory, setInventory] = useState<InventoryItem[]>(() => {
-        const saved = localStorage.getItem('poultry_inventory');
-        return saved ? JSON.parse(saved) : [
-            { id: 'inv-1', name: 'Jagung Giling', stock: 1500, unit: 'kg', minStock: 200 },
-            { id: 'inv-2', name: 'Bekatul (Dedak)', stock: 800, unit: 'kg', minStock: 150 },
-            { id: 'inv-3', name: 'Konsentrat Layer', stock: 600, unit: 'kg', minStock: 250 },
-            { id: 'inv-4', name: 'Pakan Jadi Mix', stock: 0, unit: 'kg', minStock: 500 },
-        ];
-    });
-
-    const [recipes, setRecipes] = useState<any[]>(() => {
-        const saved = localStorage.getItem('poultry_recipes');
-        if (saved) return JSON.parse(saved);
-        return [
-            {
-                id: 'r1',
-                name: 'Standard Layer Mix',
-                targetFcr: 2.35,
-                lastUsed: '2026-03-15',
-                ingredients: [
-                    { inventoryItemId: 'inv-1', percentage: 50 },
-                    { inventoryItemId: 'inv-2', percentage: 20 },
-                    { inventoryItemId: 'inv-3', percentage: 30 },
-                ]
-            }
-        ];
-    });
-
-    // --- PERSISTENCE ---
-    useEffect(() => { localStorage.setItem('poultry_prod_logs', JSON.stringify(productionLogs)); }, [productionLogs]);
-    useEffect(() => { localStorage.setItem('poultry_sales_logs', JSON.stringify(salesLogs)); }, [salesLogs]);
-    useEffect(() => { localStorage.setItem('poultry_transactions', JSON.stringify(transactions)); }, [transactions]);
-    useEffect(() => { localStorage.setItem('poultry_inventory', JSON.stringify(inventory)); }, [inventory]);
-    useEffect(() => { localStorage.setItem('poultry_recipes', JSON.stringify(recipes)); }, [recipes]);
-
-    // --- ACTIONS ---
-    const saveProduction = (logData: Omit<ProductionLog, 'id'>) => {
-        const newLog = { ...logData, id: `prod-${Date.now()}` };
-        setProductionLogs(prev => [...prev, newLog]);
-        
-        // Auto-reduce feed inventory if possible
-        // (Assuming feed usage is tracked in logData.feedConsumed)
-        const feedItem = inventory.find(i => i.name.toLowerCase().includes('pakan jadi'));
-        if (feedItem && logData.feedConsumed > 0) {
-            updateInventory(feedItem.id, -logData.feedConsumed);
+    if (!saleData.isFree) {
+      // Deduct egg stock for the sold category
+      setInventory(prev => prev.map(item => {
+        if (item.type === ItemType.EGG_STOCK && item.eggCategory === saleData.category) {
+          return { ...item, quantity: Math.max(0, item.quantity - saleData.quantity) };
         }
+        return item;
+      }));
+
+      addTransaction({
+        date: saleData.date,
+        description: `Penjualan Telur: ${saleData.category} (${saleData.customer})`,
+        qty: `${saleData.quantity} Unit`,
+        price: saleData.price,
+        total: saleData.total,
+        account: 'Kas Tunai',
+        type: 'INCOME',
+        category: saleData.category,
+      });
+    }
+  };
+
+  // Recipe CRUD
+  const addRecipe = (r: any) => setRecipes(prev => [...prev, { ...r, id: `rcp-${Date.now()}` }]);
+  const updateRecipe = (id: string, updates: any) => setRecipes(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
+  const deleteRecipe = (id: string) => setRecipes(prev => prev.filter(r => r.id !== id));
+
+  // ─── Computed Analytics ────────────────────────────────────────────────────
+
+  /** HDP % for a specific house/date */
+  const getHDP = (houseId: string, date: string, currentCount: number): number => {
+    const log = productionLogs.find(p => p.houseId === houseId && p.date === date);
+    if (!log || currentCount === 0) return 0;
+    return (log.eggCount / currentCount) * 100;
+  };
+
+  /** Cumulative FCR = total feed consumed / total egg kg for a house */
+  const getCumulativeFCR = (houseId: string): number => {
+    const logs = productionLogs.filter(p => p.houseId === houseId);
+    const totalFeed = logs.reduce((a, b) => a + b.feedConsumed, 0);
+    const totalEggKg = logs.reduce((a, b) => a + b.totalKg, 0);
+    if (totalEggKg === 0) return 0;
+    return totalFeed / totalEggKg;
+  };
+
+  /** Average feed intake per bird per day (grams), based on most recent log */
+  const getFeedIntakePerBird = (houseId: string, currentCount: number): number => {
+    const logs = productionLogs.filter(p => p.houseId === houseId);
+    if (logs.length === 0 || currentCount === 0) return 0;
+    const lastLog = logs[logs.length - 1];
+    return (lastLog.feedConsumed * 1000) / currentCount;
+  };
+
+  /** Full analytics bundle for a flock */
+  const getFlockAnalytics = (houseId: string, currentCount: number): FlockAnalytics => {
+    const logs = productionLogs.filter(p => p.houseId === houseId);
+    const totalFeed = logs.reduce((a, b) => a + b.feedConsumed, 0);
+    const totalEggKg = logs.reduce((a, b) => a + b.totalKg, 0);
+    const cumulativeFCR = totalEggKg > 0 ? totalFeed / totalEggKg : 0;
+
+    // Estimate feed cost from inventory lastPrice
+    const totalFeedCost = logs.reduce((acc, log) => {
+      const item = inventory.find(i => i.id === log.feedInventoryItemId);
+      return acc + (item ? log.feedConsumed * item.lastPrice : 0);
+    }, 0);
+
+    const hppPerKg = totalEggKg > 0 ? totalFeedCost / totalEggKg : 0;
+
+    const totalIncome = salesLogs
+      .filter(s => s.houseId === houseId && !s.isFree)
+      .reduce((a, b) => a + b.total, 0);
+    const netPL = totalIncome - totalFeedCost;
+
+    return {
+      houseId,
+      cumulativeFCR,
+      feedIntakePerBirdGrams: getFeedIntakePerBird(houseId, currentCount),
+      hppPerKg,
+      totalEggKg,
+      totalFeedCost,
+      netPL,
     };
+  };
 
-    const saveSale = (saleData: Omit<SalesLog, 'id'>) => {
-        const newSale = { ...saleData, id: `sale-${Date.now()}` };
-        setSalesLogs(prev => [...prev, newSale]);
+  const saveFarmSettings = (settings: Partial<FarmSettings>) => {
+    setFarmSettings(prev => ({ ...prev, ...settings }));
+  };
 
-        // Add to financial transactions if not free
-        if (!saleData.isFree) {
-            addTransaction({
-                date: saleData.date,
-                description: `Penjualan Telur: ${saleData.category} (${saleData.customer})`,
-                qty: `${saleData.quantity} Unit`,
-                price: saleData.price,
-                total: saleData.total,
-                account: 'Kas Tunai',
-                type: 'INCOME',
-                category: saleData.category
-            });
-        }
-    };
+  const addModalAwal = (amount: number, description = 'Modal Awal') => {
+    addTransaction({
+      date: new Date().toISOString().split('T')[0],
+      description,
+      qty: '1',
+      price: amount,
+      total: amount,
+      account: 'Kas',
+      type: 'MODAL',
+    });
+    saveFarmSettings({ initialCapital: farmSettings.initialCapital + amount });
+  };
 
-    const addTransaction = (txData: Omit<FinancialTransaction, 'id'>) => {
-        setTransactions(prev => [...prev, { ...txData, id: `tx-${Date.now()}` }]);
-    };
-
-    const updateInventory = (id: string, delta: number) => {
-        setInventory(prev => prev.map(item => 
-            item.id === id ? { ...item, stock: Math.max(0, item.stock + delta) } : item
-        ));
-    };
-
-    const addInventoryItem = (itemData: Omit<InventoryItem, 'id'>) => {
-        setInventory(prev => [...prev, { ...itemData, id: `inv-${Date.now()}` }]);
-    };
-
-    const addRecipe = (recipeData: any) => {
-        setRecipes(prev => [...prev, { ...recipeData, id: `rec-${Date.now()}` }]);
-    };
-
-    const updateRecipe = (id: string, updates: any) => {
-        setRecipes(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
-    };
-
-    const deleteRecipe = (id: string) => {
-        setRecipes(prev => prev.filter(r => r.id !== id));
-    };
-
-    return (
-        <GlobalContext.Provider value={{ 
-            productionLogs, 
-            salesLogs, 
-            transactions, 
-            inventory,
-            recipes,
-            saveProduction,
-            saveSale,
-            addTransaction,
-            updateInventory,
-            addInventoryItem,
-            addRecipe,
-            updateRecipe,
-            deleteRecipe
-        }}>
-            {children}
-        </GlobalContext.Provider>
-    );
+  return (
+    <GlobalContext.Provider value={{
+      productionLogs, salesLogs, transactions, inventory, mortalityRecords, recipes,
+      saveProduction, saveSale, addTransaction,
+      updateInventory, addInventoryItem, updateInventoryItem,
+      addRecipe, updateRecipe, deleteRecipe,
+      getHDP, getCumulativeFCR, getFeedIntakePerBird, getFlockAnalytics,
+      farmSettings, saveFarmSettings, addModalAwal,
+    }}>
+      {children}
+    </GlobalContext.Provider>
+  );
 };
 
 export const useGlobalData = () => {
-    const context = useContext(GlobalContext);
-    if (!context) throw new Error('useGlobalData must be used within a GlobalProvider');
-    return context;
+  const ctx = useContext(GlobalContext);
+  if (!ctx) throw new Error('useGlobalData must be used within a GlobalProvider');
+  return ctx;
 };

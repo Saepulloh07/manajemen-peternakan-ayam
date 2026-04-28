@@ -59,6 +59,41 @@ export default function Finance() {
   const activeFlock = getActiveFlockByHouse(activeHouse?.id || '');
   const currentPopulation = activeFlock?.currentCount || 0;
 
+  // ─── Egg Categorization Helpers ───────────────────────────────────────────
+  // Normal = BM + KRC + KS + PELOR (sellable quality eggs)
+  const getNormalKg = (log: typeof filteredProdLogs[0]) =>
+    (log.breakdown[EggCategory.BM] || 0) +
+    (log.breakdown[EggCategory.KRC] || 0) +
+    (log.breakdown[EggCategory.KS] || 0) +
+    (log.breakdown[EggCategory.PELOR] || 0);
+
+  // Retak = KRC_RETAK + KS_RETAK + RETAK
+  const getRetakKg = (log: typeof filteredProdLogs[0]) =>
+    (log.breakdown[EggCategory.KRC_RETAK] || 0) +
+    (log.breakdown[EggCategory.KS_RETAK] || 0) +
+    (log.breakdown[EggCategory.RETAK] || 0);
+
+  // Pecah/Afkir = PECAH + discardedEggs
+  const getPecahKg = (log: typeof filteredProdLogs[0]) =>
+    (log.breakdown[EggCategory.PECAH] || 0) + (log.discardedEggs || 0);
+
+  // Telur terjual per hari per kategori (from salesLogs by date)
+  const getSoldByDate = (date: string, category: 'NORMAL' | 'RETAK') => {
+    const normalCats = [EggCategory.BM, EggCategory.KRC, EggCategory.KS, EggCategory.PELOR];
+    const retakCats = [EggCategory.KRC_RETAK, EggCategory.KS_RETAK, EggCategory.RETAK];
+    const cats = category === 'NORMAL' ? normalCats : retakCats;
+    return filteredSalesLogs
+      .filter(s => s.date === date && cats.includes(s.category as EggCategory) && !s.isFree)
+      .reduce((a, b) => a + b.quantity, 0);
+  };
+  const getFreeSoldByDate = (date: string) =>
+    filteredSalesLogs.filter(s => s.date === date && s.isFree).reduce((a, b) => a + b.quantity, 0);
+
+  // Totals
+  const totalNormal = filteredProdLogs.reduce((a, b) => a + getNormalKg(b), 0);
+  const totalRetak = filteredProdLogs.reduce((a, b) => a + getRetakKg(b), 0);
+  const totalPecah = filteredProdLogs.reduce((a, b) => a + getPecahKg(b), 0);
+
   const handleSaveAsset = (e: React.FormEvent) => {
     e.preventDefault();
     Swal.fire({
@@ -150,19 +185,25 @@ export default function Finance() {
     filteredProdLogs.forEach((row, i) => {
       const r = rowStart + i;
       const hdp = ((row.eggCount / (currentPopulation || 1)) * 100).toFixed(2);
-      
+      const normalKg = getNormalKg(row);
+      const retakKg = getRetakKg(row);
+      const pecahKg = getPecahKg(row);
+      const soldNormal = getSoldByDate(row.date, 'NORMAL');
+      const freeQty = getFreeSoldByDate(row.date);
+      const soldRetak = getSoldByDate(row.date, 'RETAK');
+
       sheet1.getCell(`A${r}`).value = new Date(row.date).toLocaleDateString('id-ID');
-      sheet1.getCell(`B${r}`).value = row.eggCount; // Contoh mapping sederhana
-      sheet1.getCell(`C${r}`).value = ''; 
-      sheet1.getCell(`D${r}`).value = row.discardedEggs;
-      sheet1.getCell(`E${r}`).value = row.breakdown[EggCategory.RETAK] || 0;
-      sheet1.getCell(`F${r}`).value = '';
-      sheet1.getCell(`G${r}`).value = '';
-      sheet1.getCell(`H${r}`).value = row.breakdown[EggCategory.PECAH] || 0;
-      sheet1.getCell(`I${r}`).value = '';
-      sheet1.getCell(`J${r}`).value = row.totalKg;
-      sheet1.getCell(`K${r}`).value = hdp;
-      sheet1.getCell(`L${r}`).value = '';
+      sheet1.getCell(`B${r}`).value = normalKg;       // Normal Produksi
+      sheet1.getCell(`C${r}`).value = soldNormal;     // Normal Penjualan
+      sheet1.getCell(`D${r}`).value = freeQty;        // Normal Free
+      sheet1.getCell(`E${r}`).value = retakKg;        // Retak Produksi
+      sheet1.getCell(`F${r}`).value = soldRetak;      // Retak Penjualan
+      sheet1.getCell(`G${r}`).value = 0;              // Retak Free
+      sheet1.getCell(`H${r}`).value = row.breakdown[EggCategory.PECAH] || 0; // Pecah Produksi
+      sheet1.getCell(`I${r}`).value = row.discardedEggs || 0;                // Dibuang/Afkir
+      sheet1.getCell(`J${r}`).value = row.totalKg;    // Total Produksi KG
+      sheet1.getCell(`K${r}`).value = hdp;            // %HDP
+      sheet1.getCell(`L${r}`).value = row.breakdown[EggCategory.BM] ? `BM:${row.breakdown[EggCategory.BM]}kg` : '';
       
       cols1.forEach(col => {
           const c = sheet1.getCell(`${col}${r}`);
@@ -395,20 +436,30 @@ export default function Finance() {
                             <tbody className="text-[10px] text-slate-700 font-medium">
                                 {filteredProdLogs.map((row, idx) => {
                                     const hdp = ((row.eggCount / (currentPopulation || 1)) * 100).toFixed(1);
+                                    const normalKg = getNormalKg(row);
+                                    const retakKg = getRetakKg(row);
+                                    const pecahKg = getPecahKg(row);
+                                    const soldNormal = getSoldByDate(row.date, 'NORMAL');
+                                    const freeQty = getFreeSoldByDate(row.date);
+                                    const soldRetak = getSoldByDate(row.date, 'RETAK');
                                     return (
                                         <tr key={idx} className="hover:bg-slate-50 transition-colors border-b border-slate-100">
                                             <td className="px-3 py-3 border-r border-slate-100 font-bold whitespace-nowrap text-left">{new Date(row.date).toLocaleDateString('id-ID')}</td>
-                                            <td className="px-2 py-3 border-r border-slate-100 text-slate-900 font-bold">{row.eggCount || '-'}</td>
-                                            <td className="px-2 py-3 border-r border-slate-100">-</td>
-                                            <td className="px-2 py-3 border-r border-slate-200">{row.discardedEggs || '-'}</td>
-                                            <td className="px-2 py-3 border-r border-slate-100 text-amber-600 font-bold">{row.breakdown[EggCategory.RETAK] || '-'}</td>
-                                            <td className="px-2 py-3 border-r border-slate-100">-</td>
+                                            {/* Normal */}
+                                            <td className="px-2 py-3 border-r border-slate-100 text-slate-900 font-bold">{normalKg.toFixed(2)}</td>
+                                            <td className="px-2 py-3 border-r border-slate-100 text-emerald-600 font-bold">{soldNormal > 0 ? soldNormal : '-'}</td>
+                                            <td className="px-2 py-3 border-r border-slate-200 text-blue-600">{freeQty > 0 ? freeQty : '-'}</td>
+                                            {/* Retak */}
+                                            <td className="px-2 py-3 border-r border-slate-100 text-amber-600 font-bold">{retakKg.toFixed(2)}</td>
+                                            <td className="px-2 py-3 border-r border-slate-100 text-slate-500">{soldRetak > 0 ? soldRetak : '-'}</td>
                                             <td className="px-2 py-3 border-r border-slate-200">-</td>
-                                            <td className="px-2 py-3 border-r border-slate-100 text-rose-600 font-bold">{row.breakdown[EggCategory.PECAH] || '-'}</td>
-                                            <td className="px-2 py-3 border-r border-slate-200">-</td>
-                                            <td className="px-3 py-3 border-r border-slate-100 font-black italic text-emerald-600">{row.totalKg.toFixed(2)} KG</td>
+                                            {/* Pecah/Afkir */}
+                                            <td className="px-2 py-3 border-r border-slate-100 text-rose-600 font-bold">{(row.breakdown[EggCategory.PECAH] || 0).toFixed(2)}</td>
+                                            <td className="px-2 py-3 border-r border-slate-200 text-rose-400">{row.discardedEggs > 0 ? row.discardedEggs : '-'}</td>
+                                            {/* Total & HDP */}
+                                            <td className="px-3 py-3 border-r border-slate-100 font-black italic text-emerald-600">{row.totalKg.toFixed(2)} kg</td>
                                             <td className="px-3 py-3 border-r border-slate-100 font-bold">{hdp}%</td>
-                                            <td className="px-3 py-3 text-slate-400">-</td>
+                                            <td className="px-3 py-3 text-slate-400 text-[9px]">{row.breakdown[EggCategory.BM] ? `BM:${row.breakdown[EggCategory.BM]}` : '-'}</td>
                                         </tr>
                                     );
                                 })}
@@ -419,16 +470,18 @@ export default function Finance() {
                             <tfoot className="bg-slate-50 font-black text-[10px] uppercase tracking-widest text-slate-900 border-t-2 border-slate-200">
                                 <tr>
                                     <td className="px-3 py-4 text-left border border-slate-200">TOTAL KESELURUHAN</td>
-                                    <td className="px-2 py-4 border border-slate-200">{filteredProdLogs.reduce((a, b) => a + b.eggCount, 0)}</td>
-                                    <td className="px-2 py-4 border border-slate-200">-</td>
-                                    <td className="px-2 py-4 border border-slate-200">{filteredProdLogs.reduce((a, b) => a + b.discardedEggs, 0)}</td>
-                                    <td className="px-2 py-4 border border-slate-200 text-amber-600">{filteredProdLogs.reduce((a, b) => a + (b.breakdown[EggCategory.RETAK] || 0), 0)}</td>
+                                    <td className="px-2 py-4 border border-slate-200">{totalNormal.toFixed(2)}</td>
                                     <td className="px-2 py-4 border border-slate-200">-</td>
                                     <td className="px-2 py-4 border border-slate-200">-</td>
-                                    <td className="px-2 py-4 border border-slate-200 text-rose-600">{filteredProdLogs.reduce((a, b) => a + (b.breakdown[EggCategory.PECAH] || 0), 0)}</td>
+                                    <td className="px-2 py-4 border border-slate-200 text-amber-600">{totalRetak.toFixed(2)}</td>
                                     <td className="px-2 py-4 border border-slate-200">-</td>
-                                    <td className="px-3 py-4 border border-slate-200 text-emerald-600 italic">{totalProduction.toFixed(2)} KG</td>
-                                    <td className="px-3 py-4 border border-slate-200">-</td>
+                                    <td className="px-2 py-4 border border-slate-200">-</td>
+                                    <td className="px-2 py-4 border border-slate-200 text-rose-600">{totalPecah.toFixed(2)}</td>
+                                    <td className="px-2 py-4 border border-slate-200 text-rose-400">{filteredProdLogs.reduce((a, b) => a + (b.discardedEggs || 0), 0)}</td>
+                                    <td className="px-3 py-4 border border-slate-200 text-emerald-600 italic">{totalProduction.toFixed(2)} kg</td>
+                                    <td className="px-3 py-4 border border-slate-200">
+                                      {currentPopulation > 0 ? ((filteredProdLogs.reduce((a,b)=>a+b.eggCount,0) / (filteredProdLogs.length * currentPopulation || 1)) * 100).toFixed(1) + '%' : '-'}
+                                    </td>
                                     <td className="px-3 py-4 border border-slate-200">-</td>
                                 </tr>
                             </tfoot>

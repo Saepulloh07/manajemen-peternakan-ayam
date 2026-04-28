@@ -6,7 +6,9 @@ interface HouseContextType {
   selectedHouseId: string;
   setSelectedHouseId: (id: string) => void;
   activeHouse: PoultryHouse | undefined;
-  addHouse: (name: string) => void;
+  addHouse: (name: string, capacity?: number) => void;
+  updateHouse: (id: string, updates: Partial<PoultryHouse>) => void;
+  deleteHouse: (id: string) => void;
 }
 
 const HouseContext = createContext<HouseContextType | undefined>(undefined);
@@ -34,18 +36,35 @@ export const HouseProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const activeHouse = houses.find(h => h.id === selectedHouseId) || houses[0];
 
-  const addHouse = (name: string) => {
+  const addHouse = (name: string, capacity = 0) => {
     const newHouse: PoultryHouse = {
       id: `h${Date.now()}`,
       name,
-      capacity: 0
+      capacity,
     };
     setHouses(prev => [...prev, newHouse]);
     setSelectedHouseId(newHouse.id);
   };
 
+  const updateHouse = (id: string, updates: Partial<PoultryHouse>) => {
+    setHouses(prev => prev.map(h => h.id === id ? { ...h, ...updates } : h));
+  };
+
+  const deleteHouse = (id: string) => {
+    setHouses(prev => {
+      const filtered = prev.filter(h => h.id !== id);
+      if (selectedHouseId === id && filtered.length > 0) {
+        setSelectedHouseId(filtered[0].id);
+      }
+      return filtered;
+    });
+  };
+
   return (
-    <HouseContext.Provider value={{ houses, selectedHouseId, setSelectedHouseId, activeHouse, addHouse }}>
+    <HouseContext.Provider value={{
+      houses, selectedHouseId, setSelectedHouseId, activeHouse,
+      addHouse, updateHouse, deleteHouse
+    }}>
       {children}
     </HouseContext.Provider>
   );

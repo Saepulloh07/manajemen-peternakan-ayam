@@ -15,43 +15,92 @@ import Workers from './pages/Workers';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import FeedFormulation from './pages/FeedFormulation';
+import Vaccine from './pages/Vaccine';
 
 import { HouseProvider } from './HouseContext';
 import { FlockProvider } from './FlockContext';
 import { GlobalProvider } from './GlobalContext';
+import { UserRole } from './types';
+import { ShieldOff } from 'lucide-react';
+
+// ─── RBAC Definitions ─────────────────────────────────────────────────────────
+
+const ROUTE_ROLES: Record<string, UserRole[]> = {
+  dashboard:       [UserRole.SUPER_ADMIN, UserRole.ADMIN],
+  production:      [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.WORKER],
+  feedFormulation: [UserRole.SUPER_ADMIN, UserRole.ADMIN],
+  vaccine:         [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.WORKER],
+  sales:           [UserRole.SUPER_ADMIN, UserRole.ADMIN],
+  inventory:       [UserRole.SUPER_ADMIN, UserRole.ADMIN],
+  finance:         [UserRole.SUPER_ADMIN],
+  workers:         [UserRole.SUPER_ADMIN],
+  settings:        [UserRole.SUPER_ADMIN],
+};
+
+function canAccess(tab: string, role: UserRole): boolean {
+  return ROUTE_ROLES[tab]?.includes(role) ?? false;
+}
+
+// ─── Access Denied Panel ──────────────────────────────────────────────────────
+
+function AccessDenied({ tab }: { tab: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-8">
+      <div className="w-16 h-16 bg-rose-50 border border-rose-200 rounded-sm flex items-center justify-center mb-6">
+        <ShieldOff size={28} className="text-rose-400" />
+      </div>
+      <h2 className="text-lg font-black uppercase tracking-tight text-slate-900 italic">Akses Ditolak</h2>
+      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">
+        Role Anda tidak memiliki izin mengakses modul ini
+      </p>
+      <div className="mt-6 bg-rose-50 border border-rose-100 px-6 py-3">
+        <p className="text-[10px] text-rose-600 font-bold uppercase tracking-widest">
+          Hubungi SUPER_ADMIN untuk permintaan akses
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── App Content ──────────────────────────────────────────────────────────────
 
 function AppContent() {
   const { user, isLoading } = useApp();
-  const [activeTab, setActiveTab] = useState('dashboard');
+
+  // WORKER defaults to production tab; others start at dashboard
+  const defaultTab = user?.role === UserRole.WORKER ? 'production' : 'dashboard';
+  const [activeTab, setActiveTab] = useState(defaultTab);
 
   if (isLoading) {
     return (
       <div className="h-screen flex items-center justify-center bg-slate-900">
         <div className="animate-pulse flex flex-col items-center">
           <div className="w-16 h-16 bg-white rounded-sm mb-6 shadow-[0_0_20px_rgba(255,255,255,0.1)] relative">
-            <div className="absolute inset-0 border-2 border-amber-500 animate-ping opacity-20"></div>
+            <div className="absolute inset-0 border-2 border-amber-500 animate-ping opacity-20" />
           </div>
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.5em]">Initializing Node...</p>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.5em]">Initializing...</p>
         </div>
       </div>
     );
   }
 
-  if (!user) {
-    return <Login />;
-  }
+  if (!user) return <Login />;
 
   const renderContent = () => {
+    if (!canAccess(activeTab, user.role)) {
+      return <AccessDenied tab={activeTab} />;
+    }
     switch (activeTab) {
-      case 'dashboard': return <Dashboard />;
-      case 'production': return <Production />;
+      case 'dashboard':       return <Dashboard />;
+      case 'production':      return <Production />;
       case 'feedFormulation': return <FeedFormulation />;
-      case 'sales': return <Sales />;
-      case 'inventory': return <Inventory />;
-      case 'finance': return <Finance />;
-      case 'workers': return <Workers />;
-      case 'settings': return <Settings />;
-      default: return <Dashboard />;
+      case 'vaccine':         return <Vaccine />;
+      case 'sales':           return <Sales />;
+      case 'inventory':       return <Inventory />;
+      case 'finance':         return <Finance />;
+      case 'workers':         return <Workers />;
+      case 'settings':        return <Settings />;
+      default:                return <Dashboard />;
     }
   };
 
@@ -61,6 +110,8 @@ function AppContent() {
     </Layout>
   );
 }
+
+// ─── Root ─────────────────────────────────────────────────────────────────────
 
 export default function App() {
   return (

@@ -4,16 +4,8 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import {
-  Egg,
-  Plus,
-  Trash2,
-  Save,
-  History,
-  Info,
-  Activity // Ditambahkan untuk icon FCR
-} from 'lucide-react';
-import { EggCategory } from '../types';
+import { Egg, Save, History, Activity, TrendingUp, Flame, AlertTriangle, Clock, User as UserIcon, X } from 'lucide-react';
+import { EggCategory, ItemType, MortalityCause } from '../types';
 import { getEggCategoryRange, cn } from '../lib/utils';
 import { motion } from 'motion/react';
 import Swal from 'sweetalert2';
@@ -21,88 +13,126 @@ import Swal from 'sweetalert2';
 import { useHouse } from '../HouseContext';
 import { useFlock } from '../FlockContext';
 import { useGlobalData } from '../GlobalContext';
+import { useApp } from '../AppContext';
+
+// Strain HDP standard by age week (simplified ISA Brown / Lohmann)
+function getStrainStandardHDP(ageWeeks: number): number {
+  if (ageWeeks < 18) return 0;
+  if (ageWeeks < 22) return 50;
+  if (ageWeeks < 26) return 80;
+  if (ageWeeks < 30) return 92;
+  if (ageWeeks < 50) return 94;
+  if (ageWeeks < 65) return 88;
+  return 78;
+}
+
+const MORTALITY_CAUSE_LABELS: Record<MortalityCause, string> = {
+  [MortalityCause.DISEASE]: 'Penyakit / Infeksi',
+  [MortalityCause.CULLED]:  'Afkir (Dikeluarkan)',
+  [MortalityCause.OTHER]:   'Lainnya',
+};
 
 export default function Production() {
   const { activeHouse } = useHouse();
   const { saveProduction } = useGlobalData();
-  const { updateFlock } = useFlock();
+  const { updateFlock, getActiveFlockByHouse } = useFlock();
+  const { inventory, getCumulativeFCR, productionLogs, farmSettings } = useGlobalData();
+  const { user } = useApp();
+
+  const [showHistory, setShowHistory] = useState(false);
+  const activeBatch = getActiveFlockByHouse(activeHouse?.id || '');
+
+  // Form state
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [eggCount, setEggCount] = useState(0);
   const [mortality, setMortality] = useState(0);
+  const [mortalityCause, setMortalityCause] = useState<MortalityCause>(MortalityCause.DISEASE);
   const [feedConsumed, setFeedConsumed] = useState(0);
+  const [feedInventoryItemId, setFeedInventoryItemId] = useState('');
   const [discardedEggs, setDiscardedEggs] = useState(0);
+  const [breakdown, setBreakdown] = useState<Record<string, number>>({
+    [EggCategory.BM]: 0, [EggCategory.KRC]: 0, [EggCategory.KS]: 0,
+    [EggCategory.PELOR]: 0, [EggCategory.RETAK]: 0, [EggCategory.PECAH]: 0,
+    [EggCategory.KRC_RETAK]: 0, [EggCategory.KS_RETAK]: 0,
+  });
 
-  // --- INTEGRASI FLOCK RIIL ---
-  const { getActiveFlockByHouse } = useFlock();
-  const activeBatch = getActiveFlockByHouse(activeHouse?.id || '');
+  // Feed items from inventory
+  const feedItems = useMemo(() =>
+    inventory.filter(i => i.type === ItemType.FINISHED_FEED || i.type === ItemType.RAW_MATERIAL),
+    [inventory]
+  );
 
-  // Fungsi menghitung umur profesional (Minggu + Hari)
-  const calculateDetailedAge = (arrivalDate: string, arrivalAgeWeeks: number, targetDate: string) => {
+  // Set default feed item
+  const selectedFeedItem = feedItems.find(i => i.id === feedInventoryItemId) || feedItems[0];
+
+  // Age calculation
+  const calculateAge = (arrivalDate: string, arrivalAgeWeeks: number, targetDate: string) => {
     if (!arrivalDate) return { weeks: 0, days: 0 };
-    
     const start = new Date(arrivalDate);
     const end = new Date(targetDate);
-    const diffTime = end.getTime() - start.getTime();
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    
-    const totalDays = diffDays + (arrivalAgeWeeks * 7);
-    const weeks = Math.floor(totalDays / 7);
-    const days = totalDays % 7;
-    
-    return { weeks, days };
+    const diffDays = Math.floor((end.getTime() - start.getTime()) / 86400000);
+    const totalDays = diffDays + arrivalAgeWeeks * 7;
+    return { weeks: Math.floor(totalDays / 7), days: totalDays % 7 };
   };
 
   const age = useMemo(() => {
     if (!activeBatch) return { weeks: 0, days: 0 };
-    return calculateDetailedAge(activeBatch.arrivalDate, activeBatch.arrivalAgeWeeks, date);
+    return calculateAge(activeBatch.arrivalDate, activeBatch.arrivalAgeWeeks, date);
   }, [activeBatch, date]);
 
-  const [breakdown, setBreakdown] = useState<Record<string, number>>({
-    [EggCategory.BM]: 0,
-    [EggCategory.KRC]: 0,
-    [EggCategory.KS]: 0,
-    [EggCategory.PELOR]: 0,
-    [EggCategory.RETAK]: 0,
-    [EggCategory.PECAH]: 0,
-  });
+  const handleBreakdownChange = (cat: string, val: number) =>
+    setBreakdown(prev => ({ ...prev, [cat]: val }));
 
-  const handleBreakdownChange = (category: string, value: number) => {
-    setBreakdown(prev => ({ ...prev, [category]: value }));
-  };
+  const totalBreakdownKg = useMemo(() =>
+    Object.values(breakdown).reduce((a: number, b: unknown) => a + (b as number), 0), [breakdown]);
 
-  // Menggunakan useMemo agar kalkulasi lebih efisien
-  const totalBreakdownKg = useMemo(() => {
-    return Object.entries(breakdown).reduce((acc: number, [_, weight]) => acc + (weight as number), 0);
-  }, [breakdown]);
-
-  // [FITUR BARU] Kalkulasi FCR Otomatis secara Real-Time (Total Kg Pakan / Total Kg Telur)
+  // Live FCR
   const currentFCR = useMemo(() => {
-    if (totalBreakdownKg > 0 && feedConsumed > 0) {
+    if (totalBreakdownKg > 0 && feedConsumed > 0)
       return (feedConsumed / totalBreakdownKg).toFixed(2);
-    }
-    return "0.00";
+    return '0.00';
   }, [feedConsumed, totalBreakdownKg]);
+
+  // HDP calculation
+  const hdp = useMemo(() => {
+    if (!activeBatch || activeBatch.currentCount === 0 || eggCount === 0) return 0;
+    return (eggCount / activeBatch.currentCount) * 100;
+  }, [eggCount, activeBatch]);
+
+  const standardHDP = getStrainStandardHDP(age.weeks);
+
+  // Cumulative FCR
+  const cumulativeFCR = getCumulativeFCR(activeHouse?.id || '');
+
+  // Feed intake per bird (grams)
+  const feedIntakePerBird = useMemo(() => {
+    if (!activeBatch || activeBatch.currentCount === 0 || feedConsumed === 0) return 0;
+    return (feedConsumed * 1000) / activeBatch.currentCount;
+  }, [feedConsumed, activeBatch]);
 
   const handleSave = () => {
     if (!eggCount || !feedConsumed || totalBreakdownKg === 0) {
-      Swal.fire({
-        title: 'Data Tidak Lengkap',
-        text: 'Mohon isi total produksi, pakan konsumsi, dan klasifikasi berat telur.',
-        icon: 'warning',
-        confirmButtonColor: '#0f172a',
-      });
+      Swal.fire({ title: 'Data Tidak Lengkap', text: 'Isi total produksi, pakan, dan klasifikasi berat.', icon: 'warning', confirmButtonColor: '#0f172a' });
+      return;
+    }
+    const effectiveFeedId = feedInventoryItemId || feedItems[0]?.id || '';
+    const feedItem = inventory.find(i => i.id === effectiveFeedId);
+    if (feedItem && feedItem.quantity < feedConsumed) {
+      Swal.fire({ title: 'Stok Pakan Tidak Cukup!', text: `Stok ${feedItem.name}: ${feedItem.quantity} kg, dibutuhkan: ${feedConsumed} kg.`, icon: 'error', confirmButtonColor: '#0f172a' });
       return;
     }
 
     Swal.fire({
       title: 'Simpan Produksi?',
       html: `
-        <div class="text-left mt-4 text-sm">
-          <p>Umur Ayam: <b>${age.weeks} Minggu ${age.days} Hari</b></p>
-          <p>Total Pakan: <b>${feedConsumed} kg</b></p>
-          <p>Total Telur: <b>${totalBreakdownKg} kg</b></p>
+        <div class="text-left mt-4 text-sm space-y-1">
+          <p>Umur Ayam: <b>${age.weeks}m ${age.days}h</b></p>
+          <p>Pakan (${feedItem?.name || '-'}): <b>${feedConsumed} kg</b></p>
+          <p>Total Telur: <b>${totalBreakdownKg.toFixed(2)} kg</b></p>
+          <p>HDP: <b>${hdp.toFixed(1)}%</b> (Std: ${standardHDP}%)</p>
           <hr class="my-2"/>
-          <p class="text-amber-600 font-bold text-lg">FCR Harian: ${currentFCR}</p>
+          <p class="text-amber-600 font-bold text-base">FCR Hari Ini: ${currentFCR}</p>
+          ${mortality > 0 ? `<p class="text-rose-600 font-bold">Mortalitas: ${mortality} ekor (${MORTALITY_CAUSE_LABELS[mortalityCause]})</p>` : ''}
         </div>
       `,
       icon: 'question',
@@ -111,227 +141,284 @@ export default function Production() {
       cancelButtonColor: '#f1f5f9',
       confirmButtonText: 'Ya, Simpan',
       cancelButtonText: 'Batal',
-      customClass: {
-        cancelButton: 'text-slate-600'
-      }
-    }).then((result) => {
+    }).then(result => {
       if (result.isConfirmed) {
-        // Save to Global Data
         saveProduction({
-            houseId: activeHouse?.id || '',
-            date,
-            eggCount,
-            feedConsumed,
-            mortality,
-            discardedEggs,
-            breakdown,
-            totalKg: totalBreakdownKg
+          houseId: activeHouse?.id || '',
+          date,
+          eggCount,
+          feedConsumed,
+          feedInventoryItemId: effectiveFeedId,
+          mortality,
+          mortalityCause: mortality > 0 ? mortalityCause : undefined,
+          discardedEggs,
+          breakdown,
+          totalKg: totalBreakdownKg,
+          inputTime: new Date().toISOString(),
+          inputBy: user?.name || 'Sistem',
         });
 
-        // Update Flock Population if mortality > 0
         if (mortality > 0 && activeBatch) {
-            updateFlock(activeBatch.id, {
-                currentCount: activeBatch.currentCount - mortality
+          updateFlock(activeBatch.id, { currentCount: activeBatch.currentCount - mortality });
+          // Mortality threshold alert
+          const threshold = farmSettings.mortalityAlertThreshold;
+          const mortalityPct = (mortality / activeBatch.currentCount) * 100;
+          if (mortalityPct > threshold) {
+            Swal.fire({
+              title: '⚠️ Mortalitas Melebihi Ambang Batas!',
+              html: `<div class="text-sm"><p>Mortalitas hari ini: <b>${mortality} ekor (${mortalityPct.toFixed(2)}%)</b></p><p>Ambang batas normal: <b>${threshold}%</b></p><p class="text-red-500 font-bold mt-2">Segera periksa kondisi kandang dan konsultasikan ke dokter hewan!</p></div>`,
+              icon: 'warning',
+              confirmButtonColor: '#e11d48',
             });
+          } else {
+            Swal.fire({ title: 'Berhasil!', text: 'Data produksi harian disimpan & inventori diperbarui.', icon: 'success', confirmButtonColor: '#0f172a' });
+          }
+        } else {
+          Swal.fire({ title: 'Berhasil!', text: 'Data produksi harian disimpan & inventori diperbarui.', icon: 'success', confirmButtonColor: '#0f172a' });
         }
 
-        Swal.fire({
-          title: 'Berhasil!',
-          text: 'Data produksi harian telah disimpan.',
-          icon: 'success',
-          confirmButtonColor: '#0f172a',
-        });
-        
-        // Reset form
-        setEggCount(0);
-        setMortality(0);
-        setFeedConsumed(0);
-        setDiscardedEggs(0);
+        setEggCount(0); setMortality(0); setFeedConsumed(0); setDiscardedEggs(0);
+        setBreakdown({ [EggCategory.BM]: 0, [EggCategory.KRC]: 0, [EggCategory.KS]: 0, [EggCategory.PELOR]: 0, [EggCategory.RETAK]: 0, [EggCategory.PECAH]: 0, [EggCategory.KRC_RETAK]: 0, [EggCategory.KS_RETAK]: 0 });
       }
     });
   };
 
   const handleReset = () => {
-    Swal.fire({
-      title: 'Reset Form?',
-      text: "Semua inputan akan dihapus.",
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#e11d48',
-      confirmButtonText: 'Reset',
-      cancelButtonText: 'Batal'
-    }).then((result) => {
-      if (result.isConfirmed) {
-        setEggCount(0);
-        setMortality(0);
-        setFeedConsumed(0);
-        setDiscardedEggs(0);
-        setBreakdown({
-          [EggCategory.BM]: 0,
-          [EggCategory.KRC]: 0,
-          [EggCategory.KS]: 0,
-          [EggCategory.PELOR]: 0,
-          [EggCategory.RETAK]: 0,
-          [EggCategory.PECAH]: 0,
-        });
-      }
-    });
+    Swal.fire({ title: 'Reset Form?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#e11d48', confirmButtonText: 'Reset' })
+      .then(r => { if (r.isConfirmed) { setEggCount(0); setMortality(0); setFeedConsumed(0); setDiscardedEggs(0); } });
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-20">
+    <div className="max-w-5xl mx-auto space-y-6 pb-20">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl md:text-2xl font-black text-slate-900 uppercase tracking-tighter italic">Input Produksi <span className="text-amber-500">{activeHouse?.name}</span></h1>
-          {/* Menampilkan Strain dan Umur Ayam Riil */}
-          <p className="text-slate-500 text-[10px] md:text-sm mt-1 uppercase font-bold tracking-widest opacity-70">
-            {activeBatch ? (
-              <>Strain: {activeBatch.strain} | Umur: <span className="text-emerald-600">{age.weeks} Minggu {age.days} Hari</span></>
-            ) : (
-              <span className="text-rose-500">⚠️ Belum ada batch aktif di kandang ini</span>
-            )}
+          <h1 className="text-xl md:text-2xl font-black text-slate-900 uppercase tracking-tighter italic">
+            Input Produksi <span className="text-amber-500">{activeHouse?.name}</span>
+          </h1>
+          <p className="text-slate-500 text-[10px] mt-1 uppercase font-bold tracking-widest">
+            {activeBatch
+              ? <><span className="text-slate-400">Strain: {activeBatch.strain}</span> · <span className="text-emerald-600 font-black">Umur: {age.weeks}m {age.days}h</span></>
+              : <span className="text-rose-500">⚠ Belum ada batch aktif</span>}
           </p>
         </div>
-        <div className="bg-white border border-slate-200 px-4 py-2 shadow-sm flex items-center space-x-2 cursor-pointer hover:bg-slate-50">
-          <History size={16} className="text-slate-400" />
-          <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">History</span>
+        <button onClick={() => setShowHistory(true)} className="bg-white border border-slate-200 px-4 py-2 shadow-sm flex items-center gap-2 hover:bg-slate-50 transition-colors">
+          <History size={15} className="text-slate-400" />
+          <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Riwayat</span>
+        </button>
+      </div>
+
+      {/* Riwayat Modal */}
+      {showHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white max-w-5xl w-full max-h-[85vh] flex flex-col shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
+              <div>
+                <h3 className="font-black text-slate-900 uppercase tracking-tight text-sm">Riwayat Produksi Harian</h3>
+                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{activeHouse?.name} · Semua Catatan</p>
+              </div>
+              <button onClick={() => setShowHistory(false)} className="p-2 hover:bg-slate-100 rounded-sm text-slate-400 hover:text-slate-900 transition-colors"><X size={18} /></button>
+            </div>
+            <div className="overflow-auto flex-1">
+              <table className="w-full text-left text-[10px] min-w-max">
+                <thead className="bg-slate-900 text-white sticky top-0">
+                  <tr>
+                    {['Tanggal', 'Jam Input', 'Diinput Oleh', 'Telur (butir)', 'Total (kg)', 'Pakan (kg)', 'FCR', 'Mati (ekor)', 'HDP %', 'Catatan'].map(h => (
+                      <th key={h} className="px-3 py-3 font-bold uppercase tracking-widest whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {productionLogs
+                    .filter(l => l.houseId === activeHouse?.id)
+                    .sort((a, b) => b.date.localeCompare(a.date))
+                    .map((log, i) => {
+                      const hdp = activeBatch && activeBatch.currentCount > 0
+                        ? ((log.eggCount / activeBatch.currentCount) * 100).toFixed(1)
+                        : '-';
+                      const fcr = log.totalKg > 0 ? (log.feedConsumed / log.totalKg).toFixed(2) : '-';
+                      return (
+                        <tr key={log.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                          <td className="px-3 py-3 font-bold whitespace-nowrap">{new Date(log.date).toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' })}</td>
+                          <td className="px-3 py-3 whitespace-nowrap flex items-center gap-1 text-slate-500">
+                            <Clock size={10} />
+                            {log.inputTime ? new Date(log.inputTime).toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit' }) : '-'}
+                          </td>
+                          <td className="px-3 py-3 whitespace-nowrap">
+                            <span className="flex items-center gap-1 text-slate-600 font-bold"><UserIcon size={10} />{log.inputBy || '-'}</span>
+                          </td>
+                          <td className="px-3 py-3 font-bold text-slate-900">{log.eggCount.toLocaleString()}</td>
+                          <td className="px-3 py-3 font-bold text-emerald-600">{log.totalKg.toFixed(2)}</td>
+                          <td className="px-3 py-3">{log.feedConsumed}</td>
+                          <td className="px-3 py-3 font-bold text-amber-600">{fcr}</td>
+                          <td className="px-3 py-3 font-bold text-rose-500">{log.mortality > 0 ? log.mortality : '-'}</td>
+                          <td className="px-3 py-3 font-bold">{hdp}%</td>
+                          <td className="px-3 py-3 text-slate-400">{log.mortalityCause ? MORTALITY_CAUSE_LABELS[log.mortalityCause] : '-'}</td>
+                        </tr>
+                      );
+                    })}
+                  {productionLogs.filter(l => l.houseId === activeHouse?.id).length === 0 && (
+                    <tr><td colSpan={10} className="px-6 py-12 text-center text-slate-400 font-bold uppercase tracking-widest">Belum ada riwayat produksi</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="px-6 py-3 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
+              <span className="text-[9px] text-slate-400 font-bold uppercase">{productionLogs.filter(l => l.houseId === activeHouse?.id).length} catatan ditemukan</span>
+              <button onClick={() => setShowHistory(false)} className="px-4 py-2 bg-slate-900 text-white text-[9px] font-bold uppercase tracking-widest hover:bg-slate-800 transition-colors">Tutup</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Analytics Cards Row */}
+      <div className="grid grid-cols-3 gap-4">
+        {/* HDP */}
+        <div className={cn(
+          'p-4 border shadow-sm relative overflow-hidden',
+          hdp >= standardHDP ? 'bg-emerald-50 border-emerald-200' : hdp > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'
+        )}>
+          <TrendingUp size={40} className="absolute right-2 top-2 opacity-[0.07]" />
+          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">HDP Hari Ini</p>
+          <p className={cn('text-2xl font-black italic', hdp >= standardHDP ? 'text-emerald-600' : 'text-amber-600')}>
+            {hdp.toFixed(1)}%
+          </p>
+          <p className="text-[9px] text-slate-400 font-bold mt-1">Std: {standardHDP}%</p>
+        </div>
+
+        {/* FCR Live */}
+        <div className="p-4 bg-slate-900 border border-slate-800 shadow-sm relative overflow-hidden">
+          <Activity size={40} className="absolute right-2 top-2 opacity-[0.07] text-amber-500" />
+          <p className="text-[9px] font-bold uppercase tracking-widest text-amber-500 mb-1">FCR Live</p>
+          <p className="text-2xl font-black italic text-white">{currentFCR}</p>
+          <p className="text-[9px] text-slate-500 font-bold mt-1">Cum: {cumulativeFCR.toFixed(2)}</p>
+        </div>
+
+        {/* Feed Intake per Bird */}
+        <div className="p-4 bg-white border border-slate-200 shadow-sm relative overflow-hidden">
+          <Flame size={40} className="absolute right-2 top-2 opacity-[0.05]" />
+          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">Intake / Ekor</p>
+          <p className="text-2xl font-black italic text-slate-900">{feedIntakePerBird.toFixed(0)}<span className="text-sm font-bold text-slate-400 ml-1">g</span></p>
+          <p className="text-[9px] text-slate-400 font-bold mt-1">Std layer: 110–120g</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {/* Left Column: Essential Stats */}
-        <div className="md:col-span-1 space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Left: Form Input */}
+        <div className="md:col-span-1 space-y-4">
           <div className="bg-white p-6 border border-slate-200 shadow-sm space-y-4">
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Tanggal Operasional</label>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm focus:outline-none focus:border-amber-500"
-              />
+              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Tanggal</label>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm focus:outline-none focus:border-amber-500" />
             </div>
+
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Total Produksi (Butir)</label>
-              <input
-                type="number"
-                placeholder="0"
-                value={eggCount || ''}
-                onChange={(e) => setEggCount(Number(e.target.value))}
-                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500"
-              />
+              <input type="number" placeholder="0" value={eggCount || ''} onChange={e => setEggCount(Number(e.target.value))}
+                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
             </div>
+
+            {/* FIX #1: Feed Selector */}
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">
+                Sumber Pakan <span className="text-rose-400">*</span>
+              </label>
+              <select
+                value={feedInventoryItemId || feedItems[0]?.id || ''}
+                onChange={e => setFeedInventoryItemId(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500"
+              >
+                {feedItems.length === 0 && <option value="">-- Tidak ada pakan --</option>}
+                {feedItems.map(item => (
+                  <option key={item.id} value={item.id}>
+                    {item.name} ({item.quantity} {item.unit})
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Pakan Konsumsi (kg)</label>
-              <input
-                type="number"
-                placeholder="0.00"
-                step="0.01"
-                value={feedConsumed || ''}
-                onChange={(e) => setFeedConsumed(Number(e.target.value))}
-                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500"
-              />
+              <input type="number" placeholder="0.00" step="0.01" value={feedConsumed || ''} onChange={e => setFeedConsumed(Number(e.target.value))}
+                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
             </div>
+
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Mortalitas (Ekor)</label>
-              <input
-                type="number"
-                placeholder="0"
-                value={mortality || ''}
-                onChange={(e) => setMortality(Number(e.target.value))}
-                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500 text-rose-600"
-              />
+              <input type="number" placeholder="0" value={mortality || ''} onChange={e => setMortality(Number(e.target.value))}
+                className="w-full bg-slate-50 border border-rose-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-rose-400 text-rose-600" />
             </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Telur Dibuang/Afkir (Butir/Kg)</label>
-              <input
-                type="number"
-                placeholder="0"
-                value={discardedEggs || ''}
-                onChange={(e) => setDiscardedEggs(Number(e.target.value))}
-                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500 text-rose-600"
-              />
-            </div>
-          </div>
 
-          {/* [MODIFIKASI] Panel Indikator FCR Real-time menggantikan Tips Pengisian biasa */}
-          <div className="bg-slate-900 text-white p-6 shadow-xl border border-slate-800 relative overflow-hidden">
-            <Activity size={60} className="absolute -right-4 -top-4 opacity-10 text-amber-500" />
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-amber-500">Live FCR Kalkulasi</span>
-            </div>
-            <div className="flex items-baseline space-x-2">
-              <span className="text-3xl font-black italic">{currentFCR}</span>
-              <span className="text-xs text-slate-400 font-medium">kg pakan / kg telur</span>
-            </div>
-            {/* Peringatan visual jika FCR terindikasi terlalu tinggi (boros) */}
-            {Number(currentFCR) > 2.2 && (
-              <p className="text-[10px] mt-4 text-rose-400 bg-rose-900/30 p-2 rounded-sm border border-rose-500/20">
-                ⚠️ Peringatan: FCR &gt; 2.2. Indikasi pemborosan pakan, tumpah, atau masalah usus ayam.
-              </p>
+            {/* FIX #4: Mortality Cause — shows only when mortality > 0 */}
+            {mortality > 0 && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="overflow-hidden">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-rose-400 block mb-2 flex items-center gap-1">
+                  <AlertTriangle size={10} /> Penyebab Kematian
+                </label>
+                <select
+                  value={mortalityCause}
+                  onChange={e => setMortalityCause(e.target.value as MortalityCause)}
+                  className="w-full bg-rose-50 border border-rose-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-rose-400 text-rose-700"
+                >
+                  {Object.values(MortalityCause).map(cause => (
+                    <option key={cause} value={cause}>{MORTALITY_CAUSE_LABELS[cause]}</option>
+                  ))}
+                </select>
+              </motion.div>
             )}
-            {Number(currentFCR) > 0 && Number(currentFCR) <= 2.2 && (
-              <p className="text-[10px] mt-4 text-emerald-400 bg-emerald-900/30 p-2 rounded-sm border border-emerald-500/20">
-                ✅ FCR Optimal. Efisiensi ransum terjaga.
-              </p>
-            )}
+
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Telur Afkir/Dibuang</label>
+              <input type="number" placeholder="0" value={discardedEggs || ''} onChange={e => setDiscardedEggs(Number(e.target.value))}
+                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+            </div>
           </div>
         </div>
 
-        {/* Right Column: Egg Classification Breakdown */}
+        {/* Right: Egg Classification */}
         <div className="md:col-span-2">
           <div className="bg-white p-8 border border-slate-200 shadow-sm relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none transform translate-x-4 -translate-y-4">
+            <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none">
               <Egg size={200} />
             </div>
 
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
               <div>
-                <h3 className="font-black text-base md:text-lg text-slate-800 uppercase tracking-tighter italic">Klasifikasi Telur</h3>
-                <p className="text-[9px] md:text-[10px] text-emerald-600 font-bold uppercase tracking-widest mt-1">Berdasarkan Timbangan Total (Kg)</p>
+                <h3 className="font-black text-base text-slate-800 uppercase tracking-tighter italic">Klasifikasi Berat Telur</h3>
+                <p className="text-[9px] text-emerald-600 font-bold uppercase tracking-widest mt-1">Auto-masuk ke Stok Telur Inventori</p>
               </div>
-              <div className="px-3 py-1 bg-amber-50 rounded-sm text-[10px] md:text-[11px] font-black text-amber-700 border border-amber-200 self-start sm:self-center shadow-inner">
+              <div className="px-3 py-1 bg-amber-50 border border-amber-200 text-[10px] font-black text-amber-700 self-start sm:self-center">
                 TOTAL: {totalBreakdownKg.toFixed(2)} KG
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {Object.values(EggCategory).map((cat) => (
-                <div key={cat} className="space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              {Object.values(EggCategory).map(cat => (
+                <div key={cat} className="space-y-1">
                   <div className="flex justify-between items-end">
-                    <div>
-                      <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{cat}</span>
-                      <p className="text-[10px] text-slate-400 font-medium italic">{getEggCategoryRange(cat)}</p>
-                    </div>
+                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{cat}</span>
+                    <span className="text-[9px] text-slate-400 italic">{getEggCategoryRange(cat)}</span>
                   </div>
                   <div className="relative">
                     <input
-                      type="number"
-                      placeholder="0.0"
-                      step="0.1"
+                      type="number" placeholder="0.0" step="0.1"
                       value={breakdown[cat] || ''}
-                      onChange={(e) => handleBreakdownChange(cat, Number(e.target.value))}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-sm pl-4 pr-16 py-4 text-sm font-bold focus:outline-none focus:border-amber-500 transition-all shadow-inner"
+                      onChange={e => handleBreakdownChange(cat, Number(e.target.value))}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-sm pl-4 pr-12 py-3 text-sm font-bold focus:outline-none focus:border-amber-500"
                     />
-                    {/* Mengubah label untuk memprioritaskan KG demi akurasi FCR */}
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 uppercase">kg</span>
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">kg</span>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="mt-12 pt-8 border-t border-slate-100 flex items-center justify-end space-x-4">
-              <button
-                onClick={handleReset}
-                className="px-6 py-3 text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-slate-900 transition-colors"
-              >
-                Reset Form
+            <div className="mt-10 pt-6 border-t border-slate-100 flex items-center justify-end gap-4">
+              <button onClick={handleReset} className="px-6 py-3 text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-slate-900 transition-colors">
+                Reset
               </button>
-              <button
-                onClick={handleSave}
-                className="bg-slate-900 text-white px-8 py-4 rounded-sm font-bold text-[10px] uppercase tracking-[0.2em] flex items-center space-x-2 hover:bg-slate-800 transition-all shadow-md group"
-              >
-                <Save size={16} className="group-hover:text-amber-500 transition-colors" />
+              <button onClick={handleSave} className="bg-slate-900 text-white px-8 py-4 rounded-sm font-bold text-[10px] uppercase tracking-[0.2em] flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md group">
+                <Save size={15} className="group-hover:text-amber-500 transition-colors" />
                 <span>Simpan Produksi</span>
               </button>
             </div>
