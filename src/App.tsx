@@ -14,8 +14,11 @@ import Finance from './pages/Finance';
 import Workers from './pages/Workers';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
+import FeedFormulation from './pages/FeedFormulation';
 
 import { HouseProvider } from './HouseContext';
+import { FlockProvider } from './FlockContext';
+import { GlobalProvider } from './GlobalContext';
 
 function AppContent() {
   const { user, isLoading } = useApp();
@@ -42,6 +45,7 @@ function AppContent() {
     switch (activeTab) {
       case 'dashboard': return <Dashboard />;
       case 'production': return <Production />;
+      case 'feedFormulation': return <FeedFormulation />;
       case 'sales': return <Sales />;
       case 'inventory': return <Inventory />;
       case 'finance': return <Finance />;
@@ -61,9 +65,13 @@ function AppContent() {
 export default function App() {
   return (
     <AppProvider>
-      <HouseProvider>
-        <AppContent />
-      </HouseProvider>
+      <GlobalProvider>
+        <FlockProvider>
+          <HouseProvider>
+            <AppContent />
+          </HouseProvider>
+        </FlockProvider>
+      </GlobalProvider>
     </AppProvider>
   );
 }

@@ -36,9 +36,11 @@ const initialPrices = {
 };
 
 import { useHouse } from '../HouseContext';
+import { useGlobalData } from '../GlobalContext';
 
 export default function Sales() {
   const { activeHouse } = useHouse();
+  const { saveSale, salesLogs } = useGlobalData();
   const [activeCategory, setActiveCategory] = useState<string>(EggCategory.BM);
   const [quantity, setQuantity] = useState(0);
   const [isFree, setIsFree] = useState(false);
@@ -81,6 +83,17 @@ export default function Sales() {
       }
     }).then((result) => {
       if (result.isConfirmed) {
+        saveSale({
+            houseId: activeHouse?.id || '',
+            date: new Date().toISOString().split('T')[0],
+            category: activeCategory,
+            quantity,
+            price: prices[activeCategory as keyof typeof prices] || 0,
+            total: totalPrice,
+            isFree,
+            customer: 'Umum' // Bisa ditambahkan input customer jika perlu
+        });
+
         Swal.fire({
           title: 'Transaksi Berhasil!',
           text: 'Data penjualan telah dicatat.',
@@ -242,20 +255,23 @@ export default function Sales() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {[1, 2].map((i) => (
-                    <tr key={i} className="hover:bg-slate-50 transition-colors group">
-                      <td className="px-6 py-4 text-xs text-slate-500 font-medium">26 Apr 2026</td>
+                  {salesLogs.filter(s => s.houseId === activeHouse?.id).slice(-5).reverse().map((sale) => (
+                    <tr key={sale.id} className="hover:bg-slate-50 transition-colors group">
+                      <td className="px-6 py-4 text-xs text-slate-500 font-medium">{new Date(sale.date).toLocaleDateString('id-ID')}</td>
                       <td className="px-6 py-4">
-                        <div className="text-xs font-bold text-slate-800 uppercase tracking-tight">REMBAN</div>
-                        <div className="text-[10px] text-slate-400 font-medium lowercase italic">Telur Papan Grade A</div>
+                        <div className="text-xs font-bold text-slate-800 uppercase tracking-tight">{sale.category}</div>
+                        <div className="text-[10px] text-slate-400 font-medium lowercase italic">{sale.customer}</div>
                       </td>
-                      <td className="px-6 py-4 text-xs font-bold text-slate-900">20.5 kg</td>
-                      <td className="px-6 py-4 text-xs font-bold text-slate-900 text-right italic">{formatCurrency(584250)}</td>
+                      <td className="px-6 py-4 text-xs font-bold text-slate-900">{sale.quantity} Unit</td>
+                      <td className="px-6 py-4 text-xs font-bold text-slate-900 text-right italic">{sale.isFree ? 'FREE' : formatCurrency(sale.total)}</td>
                       <td className="px-6 py-4 text-center">
                         <span className="bg-emerald-50 text-emerald-600 text-[10px] font-black uppercase px-2 py-1 rounded-sm border border-emerald-100">Paid</span>
                       </td>
                     </tr>
                   ))}
+                  {salesLogs.length === 0 && (
+                      <tr><td colSpan={5} className="px-6 py-8 text-center text-[10px] text-slate-400 font-bold uppercase">Belum ada histori penjualan</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>

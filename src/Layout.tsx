@@ -4,20 +4,21 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { 
-  LayoutDashboard, 
-  Egg, 
-  ShoppingCart, 
-  Package, 
-  Wallet, 
-  Users, 
-  Settings, 
+import {
+  LayoutDashboard,
+  Egg,
+  ShoppingCart,
+  Package,
+  Wallet,
+  Users,
+  Settings,
   LogOut,
   ChevronRight,
   Menu,
   X,
   Plus,
-  Home
+  Home,
+  PillBottle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useApp } from './AppContext';
@@ -40,8 +41,8 @@ function SidebarItem({ icon: Icon, label, active, onClick, collapsed }: SidebarI
       onClick={onClick}
       className={cn(
         "flex items-center w-full p-3 rounded-sm transition-all duration-200 group mb-1",
-        active 
-          ? "bg-slate-800 text-white shadow-sm" 
+        active
+          ? "bg-slate-800 text-white shadow-sm"
           : "text-slate-400 hover:bg-slate-800/50 hover:text-white"
       )}
     >
@@ -83,6 +84,7 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard Utama', icon: LayoutDashboard, roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN] },
     { id: 'production', label: 'Produksi Harian', icon: Egg, roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.WORKER] },
+    { id: 'feedFormulation', label: 'Formulasi Pakan', icon: PillBottle, roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.WORKER] },
     { id: 'sales', label: 'Penjualan Telur', icon: ShoppingCart, roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN] },
     { id: 'inventory', label: 'Stok Logistik', icon: Package, roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.WORKER] },
     { id: 'finance', label: 'Keuangan & Aset', icon: Wallet, roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.WORKER] },
@@ -97,7 +99,7 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
       {/* Mobile Menu Backdrop */}
       <AnimatePresence>
         {isMobileMenuOpen && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -108,7 +110,7 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
       </AnimatePresence>
 
       {/* Sidebar */}
-      <aside 
+      <aside
         className={cn(
           "bg-slate-900 border-r border-slate-800 flex flex-col transition-all duration-300 z-[70] fixed lg:relative h-full",
           isSidebarOpen ? "w-64" : "w-0 lg:w-20",
@@ -118,7 +120,7 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
         <div className="p-6 flex items-center justify-between overflow-hidden">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-amber-500 rounded-sm flex items-center justify-center shrink-0">
-               <Egg className="text-slate-900" size={20} />
+              <Egg className="text-slate-900" size={20} />
             </div>
             {(isSidebarOpen || isMobileMenuOpen) && (
               <span className="font-black text-xl text-white tracking-tighter italic uppercase truncate">Eggly<span className="text-amber-500 font-bold not-italic font-sans text-[8px] ml-1 bg-white/10 px-1 rounded-sm vertical-top">PRO</span></span>
@@ -163,7 +165,7 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
               </div>
             )}
             {(isSidebarOpen || isMobileMenuOpen) && (
-              <button 
+              <button
                 onClick={() => setUser(null)}
                 className="text-slate-500 hover:text-amber-500 p-1"
               >
@@ -179,44 +181,44 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
         {/* Universal Header */}
         <header className="h-16 lg:h-20 bg-white border-b border-slate-200 px-4 lg:px-8 flex items-center justify-between shrink-0 z-40 relative">
           <div className="flex items-center gap-3 lg:gap-4">
-            <button 
+            <button
               onClick={() => setIsMobileMenuOpen(true)}
               className="lg:hidden text-slate-400 hover:text-slate-600 p-1"
             >
               <Menu size={24} />
             </button>
-            <button 
+            <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               className="hidden lg:block text-slate-300 hover:text-slate-600 transition-colors"
             >
               <Menu size={20} />
             </button>
             <div className="hidden lg:block w-px h-6 bg-slate-200 mx-2"></div>
-            
+
             {/* Multi-House Selector */}
             <div className="flex items-center space-x-2 bg-slate-50 border border-slate-100 p-1.5 rounded-sm">
-               <Home size={14} className="text-slate-400 ml-1" />
-               <select 
+              <Home size={14} className="text-slate-400 ml-1" />
+              <select
                 value={selectedHouseId}
                 onChange={(e) => setSelectedHouseId(e.target.value)}
                 className="bg-transparent text-[10px] lg:text-xs font-black uppercase tracking-tight text-slate-800 focus:outline-none cursor-pointer pr-1"
-               >
-                 {houses.map(h => (
-                   <option key={h.id} value={h.id}>{h.name}</option>
-                 ))}
-               </select>
+              >
+                {houses.map(h => (
+                  <option key={h.id} value={h.id}>{h.name}</option>
+                ))}
+              </select>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-4">
             <div className="hidden md:flex flex-col items-end">
-               <p className="text-[10px] font-black uppercase text-slate-900 tracking-tighter">Node Synchronized</p>
-               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short' }).format(new Date())}</p>
+              <p className="text-[10px] font-black uppercase text-slate-900 tracking-tighter">Node Synchronized</p>
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short' }).format(new Date())}</p>
             </div>
             <div className="relative">
-               <div className="w-8 h-8 lg:w-10 lg:h-10 bg-amber-50 border border-amber-100 rounded-sm flex items-center justify-center text-amber-600">
-                  <Plus size={18} />
-               </div>
+              <div className="w-8 h-8 lg:w-10 lg:h-10 bg-amber-50 border border-amber-100 rounded-sm flex items-center justify-center text-amber-600">
+                <Plus size={18} />
+              </div>
             </div>
           </div>
         </header>

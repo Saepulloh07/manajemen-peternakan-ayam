@@ -28,46 +28,36 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 
 import { useHouse } from '../HouseContext';
-
-const bukuTelurData = [
-  { tgl: '01/03/2026', nProd: 28, nJual: 0, nFree: 1, rProd: 0, rJual: 0, rFree: 0, pProd: 4, pBuang: 4, total: 33, hdp: 0.14, ket: '' },
-  { tgl: '02/03/2026', nProd: 46, nJual: 0, nFree: 1, rProd: 0, rJual: 0, rFree: 0, pProd: 7, pBuang: 7, total: 54, hdp: 0.19, ket: '' },
-  { tgl: '03/03/2026', nProd: 28, nJual: 0, nFree: 2, rProd: 0, rJual: 0, rFree: 0, pProd: 1, pBuang: 1, total: 31, hdp: 0.79, ket: '' },
-  { tgl: '04/03/2026', nProd: 33, nJual: 0, nFree: 2, rProd: 0, rJual: 0, rFree: 0, pProd: 6, pBuang: 6, total: 41, hdp: 1.05, ket: '' },
-  { tgl: '05/03/2026', nProd: 39, nJual: 0, nFree: 1, rProd: 0, rJual: 0, rFree: 0, pProd: 4, pBuang: 4, total: 44, hdp: 1.13, ket: '' },
-  { tgl: '06/03/2026', nProd: 48, nJual: 0, nFree: 3, rProd: 0, rJual: 0, rFree: 0, pProd: 5, pBuang: 5, total: 56, hdp: 1.44, ket: '' },
-  { tgl: '07/03/2026', nProd: 72, nJual: 0, nFree: 1, rProd: 0, rJual: 0, rFree: 0, pProd: 3, pBuang: 3, total: 76, hdp: 1.95, ket: '' },
-];
-
-const transaksiData = [
-  { no: '1', barang: 'Kayu 5x10 = 80 btg (Fuad)', qty: '99,468 cm³', harga: 1800000, total: 17904840, tgl: '30/8', rek: 'Aqqnes' },
-  { no: '', barang: 'Kayu 6x12 = 161 btg (Fuad)', qty: '', harga: 0, total: 0, tgl: '', rek: '' },
-  { no: '', barang: 'Kayu 5x7 = 265 btg (Fuad)', qty: '', harga: 0, total: 0, tgl: '', rek: '' },
-  { no: '2', barang: 'Seng (Versi)', qty: '2 kodi', harga: 900000, total: 1800000, tgl: '5/9', rek: 'Suryani' },
-  { no: '', barang: 'Paku atap (Versi)', qty: '2 kotak', harga: 20000, total: 40000, tgl: '5/9', rek: '' },
-  { no: '3', barang: 'Paku 1" (Versi)', qty: '13 kg', harga: 195000, total: 195000, tgl: '6/9', rek: '' },
-];
-
-const penjualanData = [
-  { no: '1', tgl: '3/31/2026', jenis: 'KRC Retak', butir: 47, harga: 1000, total: 47000, ket: 'ecer' },
-  { no: '2', tgl: '3/31/2026', jenis: 'KRC', butir: 2400, harga: 1150, total: 2760000, ket: 'Nezi' },
-  { no: '', tgl: '4/1/2026', jenis: 'KRC Dingin', butir: 120, harga: 500, total: 60000, ket: 'ecer' },
-  { no: '', tgl: '4/1/2026', jenis: 'KRC', butir: 1200, harga: 1220, total: 1464000, ket: 'Rici' },
-  { no: '', tgl: '4/1/2026', jenis: 'KS', butir: 600, harga: 1320, total: 792000, ket: 'Rici' },
-  { no: '3', tgl: '4/5/2026', jenis: 'KS Retak', butir: 60, harga: 834, total: 50000, ket: 'ecer' },
-  { no: '4', tgl: '4/8/2026', jenis: 'KS', butir: 7200, harga: 1320, total: 9504000, ket: 'Rici' },
-  { no: '', tgl: '4/14/2026', jenis: 'BM', butir: 4500, harga: 1445, total: 6502500, ket: 'Rapit' },
-  { no: '', tgl: '4/15/2026', jenis: 'BM', butir: 7500, harga: 1450, total: 10875000, ket: 'Rici' },
-  { no: '', tgl: '4/17/2026', jenis: 'BM', butir: 2100, harga: 1450, total: 3045000, ket: 'Rapit' },
-  { no: '', tgl: '4/18/2026', jenis: 'RETAK', butir: 495, harga: 868, total: 430000, ket: 'ecer' },
-  { no: '5', tgl: '4/19/2026', jenis: 'RETAK', butir: 90, harga: 834, total: 75000, ket: 'ecer' },
-  { no: '', tgl: '4/19/2026', jenis: 'BM', butir: 5700, harga: 1450, total: 8265000, ket: 'Rici' },
-];
+import { useGlobalData } from '../GlobalContext';
+import { useFlock } from '../FlockContext';
+import { EggCategory } from '../types';
 
 export default function Finance() {
   const { activeHouse } = useHouse();
+  const { getActiveFlockByHouse } = useFlock();
+  const { productionLogs, salesLogs, transactions } = useGlobalData();
+  
   const [activeTab, setActiveTab] = useState<'BUKU_TELUR' | 'BUKU_TRANSAKSI' | 'ASET'>('BUKU_TELUR');
   const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
+
+  // --- Filtering Data for Active House ---
+  const filteredProdLogs = productionLogs.filter(p => p.houseId === activeHouse?.id);
+  const filteredSalesLogs = salesLogs.filter(s => s.houseId === activeHouse?.id);
+  
+  // Transaksi biasanya global, tapi jika ingin dipisah per kandang bisa difilter deskripsinya
+  const expenseTransactions = transactions.filter(t => t.type === 'EXPENSE');
+  const incomeTransactions = transactions.filter(t => t.type === 'INCOME');
+  const modalTransactions = transactions.filter(t => t.type === 'MODAL');
+
+  // --- Total Calculations ---
+  const totalProduction = filteredProdLogs.reduce((acc, curr) => acc + curr.totalKg, 0);
+  const totalSalesTelur = filteredSalesLogs.reduce((acc, curr) => acc + curr.total, 0);
+  const totalExpenses = expenseTransactions.reduce((acc, curr) => acc + curr.total, 0);
+  const totalIncome = incomeTransactions.reduce((acc, curr) => acc + curr.total, 0);
+  const totalModal = modalTransactions.reduce((acc, curr) => acc + curr.total, 0);
+
+  const activeFlock = getActiveFlockByHouse(activeHouse?.id || '');
+  const currentPopulation = activeFlock?.currentCount || 0;
 
   const handleSaveAsset = (e: React.FormEvent) => {
     e.preventDefault();
@@ -157,20 +147,22 @@ export default function Finance() {
     ];
 
     let rowStart = 8;
-    bukuTelurData.forEach((row, i) => {
+    filteredProdLogs.forEach((row, i) => {
       const r = rowStart + i;
-      sheet1.getCell(`A${r}`).value = row.tgl;
-      sheet1.getCell(`B${r}`).value = row.nProd || '';
-      sheet1.getCell(`C${r}`).value = row.nJual || '';
-      sheet1.getCell(`D${r}`).value = row.nFree || '';
-      sheet1.getCell(`E${r}`).value = row.rProd || '';
-      sheet1.getCell(`F${r}`).value = row.rJual || '';
-      sheet1.getCell(`G${r}`).value = row.rFree || '';
-      sheet1.getCell(`H${r}`).value = row.pProd || '';
-      sheet1.getCell(`I${r}`).value = row.pBuang || '';
-      sheet1.getCell(`J${r}`).value = row.total;
-      sheet1.getCell(`K${r}`).value = row.hdp;
-      sheet1.getCell(`L${r}`).value = row.ket;
+      const hdp = ((row.eggCount / (currentPopulation || 1)) * 100).toFixed(2);
+      
+      sheet1.getCell(`A${r}`).value = new Date(row.date).toLocaleDateString('id-ID');
+      sheet1.getCell(`B${r}`).value = row.eggCount; // Contoh mapping sederhana
+      sheet1.getCell(`C${r}`).value = ''; 
+      sheet1.getCell(`D${r}`).value = row.discardedEggs;
+      sheet1.getCell(`E${r}`).value = row.breakdown[EggCategory.RETAK] || 0;
+      sheet1.getCell(`F${r}`).value = '';
+      sheet1.getCell(`G${r}`).value = '';
+      sheet1.getCell(`H${r}`).value = row.breakdown[EggCategory.PECAH] || 0;
+      sheet1.getCell(`I${r}`).value = '';
+      sheet1.getCell(`J${r}`).value = row.totalKg;
+      sheet1.getCell(`K${r}`).value = hdp;
+      sheet1.getCell(`L${r}`).value = '';
       
       cols1.forEach(col => {
           const c = sheet1.getCell(`${col}${r}`);
@@ -211,25 +203,24 @@ export default function Finance() {
     ];
 
     let rowStart2 = 3;
-    transaksiData.forEach((row, i) => {
+    expenseTransactions.forEach((row, i) => {
       const r = rowStart2 + i;
-      sheet2.getCell(`A${r}`).value = row.no;
-      sheet2.getCell(`B${r}`).value = row.barang;
+      sheet2.getCell(`A${r}`).value = i + 1;
+      sheet2.getCell(`B${r}`).value = row.description;
       sheet2.getCell(`C${r}`).value = row.qty;
-      sheet2.getCell(`D${r}`).value = row.harga || '';
-      sheet2.getCell(`E${r}`).value = row.total || '';
-      sheet2.getCell(`F${r}`).value = row.tgl;
-      sheet2.getCell(`G${r}`).value = row.rek;
+      sheet2.getCell(`D${r}`).value = row.price;
+      sheet2.getCell(`E${r}`).value = row.total;
+      sheet2.getCell(`F${r}`).value = new Date(row.date).toLocaleDateString('id-ID');
+      sheet2.getCell(`G${r}`).value = row.account;
       
       ['A','B','C','D','E','F','G'].forEach(col => {
           sheet2.getCell(`${col}${r}`).border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
       });
     });
 
-    sheet2.getCell('I3').value = 30000000;
-    sheet2.getCell('I4').value = 150000000;
-    sheet2.getCell('I5').value = 75000000;
-    sheet2.getCell('I6').value = 60000000;
+    modalTransactions.forEach((row, i) => {
+        sheet2.getCell(`I${3 + i}`).value = row.total;
+    });
 
     // --- SHEET 3: PENJUALAN ---
     const sheet3 = workbook.addWorksheet('PENJUALAN');
@@ -260,15 +251,15 @@ export default function Finance() {
       { width: 15 }, { width: 20 }, { width: 15 }
     ];
 
-    penjualanData.forEach((row, i) => {
+    filteredSalesLogs.forEach((row, i) => {
       const r = 3 + i;
-      sheet3.getCell(`A${r}`).value = row.no;
-      sheet3.getCell(`B${r}`).value = row.tgl;
-      sheet3.getCell(`C${r}`).value = row.jenis;
-      sheet3.getCell(`D${r}`).value = row.butir;
-      sheet3.getCell(`E${r}`).value = row.harga;
+      sheet3.getCell(`A${r}`).value = i + 1;
+      sheet3.getCell(`B${r}`).value = new Date(row.date).toLocaleDateString('id-ID');
+      sheet3.getCell(`C${r}`).value = row.category;
+      sheet3.getCell(`D${r}`).value = row.quantity;
+      sheet3.getCell(`E${r}`).value = row.price;
       sheet3.getCell(`F${r}`).value = row.total;
-      sheet3.getCell(`G${r}`).value = row.ket;
+      sheet3.getCell(`G${r}`).value = row.customer;
 
       cols3.forEach(col => {
         sheet3.getCell(`${col}${r}`).border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
@@ -402,23 +393,45 @@ export default function Finance() {
                                 </tr>
                             </thead>
                             <tbody className="text-[10px] text-slate-700 font-medium">
-                                {bukuTelurData.map((row, idx) => (
-                                    <tr key={idx} className="hover:bg-slate-50 transition-colors border-b border-slate-100">
-                                        <td className="px-3 py-3 border-r border-slate-100 font-bold whitespace-nowrap text-left">{row.tgl}</td>
-                                        <td className="px-2 py-3 border-r border-slate-100 text-slate-900 font-bold">{row.nProd || '-'}</td>
-                                        <td className="px-2 py-3 border-r border-slate-100">{row.nJual || '-'}</td>
-                                        <td className="px-2 py-3 border-r border-slate-200">{row.nFree || '-'}</td>
-                                        <td className="px-2 py-3 border-r border-slate-100 text-amber-600 font-bold">{row.rProd || '-'}</td>
-                                        <td className="px-2 py-3 border-r border-slate-100">{row.rJual || '-'}</td>
-                                        <td className="px-2 py-3 border-r border-slate-200">{row.rFree || '-'}</td>
-                                        <td className="px-2 py-3 border-r border-slate-100 text-rose-600 font-bold">{row.pProd || '-'}</td>
-                                        <td className="px-2 py-3 border-r border-slate-200">{row.pBuang || '-'}</td>
-                                        <td className="px-3 py-3 border-r border-slate-100 font-black italic text-emerald-600">{row.total}</td>
-                                        <td className="px-3 py-3 border-r border-slate-100 font-bold">{row.hdp}%</td>
-                                        <td className="px-3 py-3 text-slate-400">{row.ket || '-'}</td>
-                                    </tr>
-                                ))}
+                                {filteredProdLogs.map((row, idx) => {
+                                    const hdp = ((row.eggCount / (currentPopulation || 1)) * 100).toFixed(1);
+                                    return (
+                                        <tr key={idx} className="hover:bg-slate-50 transition-colors border-b border-slate-100">
+                                            <td className="px-3 py-3 border-r border-slate-100 font-bold whitespace-nowrap text-left">{new Date(row.date).toLocaleDateString('id-ID')}</td>
+                                            <td className="px-2 py-3 border-r border-slate-100 text-slate-900 font-bold">{row.eggCount || '-'}</td>
+                                            <td className="px-2 py-3 border-r border-slate-100">-</td>
+                                            <td className="px-2 py-3 border-r border-slate-200">{row.discardedEggs || '-'}</td>
+                                            <td className="px-2 py-3 border-r border-slate-100 text-amber-600 font-bold">{row.breakdown[EggCategory.RETAK] || '-'}</td>
+                                            <td className="px-2 py-3 border-r border-slate-100">-</td>
+                                            <td className="px-2 py-3 border-r border-slate-200">-</td>
+                                            <td className="px-2 py-3 border-r border-slate-100 text-rose-600 font-bold">{row.breakdown[EggCategory.PECAH] || '-'}</td>
+                                            <td className="px-2 py-3 border-r border-slate-200">-</td>
+                                            <td className="px-3 py-3 border-r border-slate-100 font-black italic text-emerald-600">{row.totalKg.toFixed(2)} KG</td>
+                                            <td className="px-3 py-3 border-r border-slate-100 font-bold">{hdp}%</td>
+                                            <td className="px-3 py-3 text-slate-400">-</td>
+                                        </tr>
+                                    );
+                                })}
+                                {filteredProdLogs.length === 0 && (
+                                    <tr><td colSpan={12} className="px-6 py-8 text-center text-[10px] text-slate-400 font-bold uppercase">Belum ada data produksi</td></tr>
+                                )}
                             </tbody>
+                            <tfoot className="bg-slate-50 font-black text-[10px] uppercase tracking-widest text-slate-900 border-t-2 border-slate-200">
+                                <tr>
+                                    <td className="px-3 py-4 text-left border border-slate-200">TOTAL KESELURUHAN</td>
+                                    <td className="px-2 py-4 border border-slate-200">{filteredProdLogs.reduce((a, b) => a + b.eggCount, 0)}</td>
+                                    <td className="px-2 py-4 border border-slate-200">-</td>
+                                    <td className="px-2 py-4 border border-slate-200">{filteredProdLogs.reduce((a, b) => a + b.discardedEggs, 0)}</td>
+                                    <td className="px-2 py-4 border border-slate-200 text-amber-600">{filteredProdLogs.reduce((a, b) => a + (b.breakdown[EggCategory.RETAK] || 0), 0)}</td>
+                                    <td className="px-2 py-4 border border-slate-200">-</td>
+                                    <td className="px-2 py-4 border border-slate-200">-</td>
+                                    <td className="px-2 py-4 border border-slate-200 text-rose-600">{filteredProdLogs.reduce((a, b) => a + (b.breakdown[EggCategory.PECAH] || 0), 0)}</td>
+                                    <td className="px-2 py-4 border border-slate-200">-</td>
+                                    <td className="px-3 py-4 border border-slate-200 text-emerald-600 italic">{totalProduction.toFixed(2)} KG</td>
+                                    <td className="px-3 py-4 border border-slate-200">-</td>
+                                    <td className="px-3 py-4 border border-slate-200">-</td>
+                                </tr>
+                            </tfoot>
                         </table>
                     </div>
                 </div>
@@ -455,18 +468,28 @@ export default function Finance() {
                                         </tr>
                                     </thead>
                                     <tbody className="text-[10px] text-slate-700 font-medium">
-                                        {transaksiData.map((row, idx) => (
+                                        {expenseTransactions.map((row, idx) => (
                                             <tr key={idx} className="hover:bg-slate-50 transition-colors border-b border-slate-100">
-                                                <td className="px-3 py-3 border-r border-slate-100 text-center font-bold">{row.no}</td>
-                                                <td className="px-3 py-3 border-r border-slate-100">{row.barang}</td>
+                                                <td className="px-3 py-3 border-r border-slate-100 text-center font-bold">{idx + 1}</td>
+                                                <td className="px-3 py-3 border-r border-slate-100">{row.description}</td>
                                                 <td className="px-3 py-3 border-r border-slate-100">{row.qty}</td>
-                                                <td className="px-3 py-3 border-r border-slate-100 text-right font-mono">{row.harga ? formatCurrency(row.harga) : ''}</td>
-                                                <td className="px-3 py-3 border-r border-slate-100 text-right font-mono font-bold text-slate-900">{row.total ? formatCurrency(row.total) : ''}</td>
-                                                <td className="px-3 py-3 border-r border-slate-100">{row.tgl}</td>
-                                                <td className="px-3 py-3 font-bold text-slate-500">{row.rek}</td>
+                                                <td className="px-3 py-3 border-r border-slate-100 text-right font-mono">{formatCurrency(row.price)}</td>
+                                                <td className="px-3 py-3 border-r border-slate-100 text-right font-mono font-bold text-slate-900">{formatCurrency(row.total)}</td>
+                                                <td className="px-3 py-3 border-r border-slate-100">{new Date(row.date).toLocaleDateString('id-ID')}</td>
+                                                <td className="px-3 py-3 font-bold text-slate-500">{row.account}</td>
                                             </tr>
                                         ))}
+                                        {expenseTransactions.length === 0 && (
+                                            <tr><td colSpan={7} className="px-6 py-4 text-center text-slate-400 italic">Belum ada pengeluaran</td></tr>
+                                        )}
                                     </tbody>
+                                    <tfoot className="bg-slate-50 font-black text-[10px] uppercase tracking-widest text-rose-600 border-t-2 border-slate-200">
+                                        <tr>
+                                            <td colSpan={4} className="px-3 py-4 text-left border border-slate-200">TOTAL PENGELUARAN</td>
+                                            <td className="px-3 py-4 text-right border border-slate-200 font-mono font-black">{formatCurrency(totalExpenses)}</td>
+                                            <td colSpan={2} className="border border-slate-200"></td>
+                                        </tr>
+                                    </tfoot>
                                 </table>
                             </div>
 
@@ -481,12 +504,20 @@ export default function Finance() {
                                         </tr>
                                     </thead>
                                     <tbody className="text-[10px] text-slate-700 font-bold font-mono">
-                                        {[30000000, 150000000, 75000000, 60000000].map((modal, i) => (
+                                        {modalTransactions.map((row, i) => (
                                             <tr key={i} className="border-b border-slate-100 bg-emerald-50">
-                                                <td className="px-3 py-3 text-emerald-700 italic">+ {formatCurrency(modal)}</td>
+                                                <td className="px-3 py-3 text-emerald-700 italic">+ {formatCurrency(row.total)}</td>
                                             </tr>
                                         ))}
+                                        {modalTransactions.length === 0 && (
+                                            <tr><td className="px-3 py-4 text-center text-slate-400 italic">Nol</td></tr>
+                                        )}
                                     </tbody>
+                                    <tfoot className="bg-emerald-100 font-black text-[10px] uppercase tracking-widest text-emerald-700 border-t-2 border-emerald-200">
+                                        <tr>
+                                            <td className="px-3 py-4 text-right font-mono font-black">{formatCurrency(totalModal)}</td>
+                                        </tr>
+                                    </tfoot>
                                 </table>
                             </div>
                         </div>
@@ -516,18 +547,28 @@ export default function Finance() {
                                     </tr>
                                 </thead>
                                 <tbody className="text-[10px] text-slate-700 font-medium">
-                                    {penjualanData.map((row, idx) => (
+                                    {filteredSalesLogs.map((row, idx) => (
                                         <tr key={idx} className="hover:bg-slate-50 transition-colors border-b border-slate-100">
-                                            <td className="px-3 py-3 border-r border-slate-100 text-center font-bold">{row.no}</td>
-                                            <td className="px-3 py-3 border-r border-slate-100 text-center">{row.tgl}</td>
-                                            <td className="px-3 py-3 border-r border-slate-100 font-bold">{row.jenis}</td>
-                                            <td className="px-3 py-3 border-r border-slate-100 text-center font-mono">{row.butir}</td>
-                                            <td className="px-3 py-3 border-r border-slate-100 text-right font-mono">{formatCurrency(row.harga)}</td>
+                                            <td className="px-3 py-3 border-r border-slate-100 text-center font-bold">{idx + 1}</td>
+                                            <td className="px-3 py-3 border-r border-slate-100 text-center">{new Date(row.date).toLocaleDateString('id-ID')}</td>
+                                            <td className="px-3 py-3 border-r border-slate-100 font-bold">{row.category}</td>
+                                            <td className="px-3 py-3 border-r border-slate-100 text-center font-mono">{row.quantity}</td>
+                                            <td className="px-3 py-3 border-r border-slate-100 text-right font-mono">{formatCurrency(row.price)}</td>
                                             <td className="px-3 py-3 border-r border-slate-100 text-right font-mono font-bold text-slate-900">{formatCurrency(row.total)}</td>
-                                            <td className="px-3 py-3 text-center uppercase text-[9px] font-bold text-slate-400">{row.ket}</td>
+                                            <td className="px-3 py-3 text-center uppercase text-[9px] font-bold text-slate-400">{row.customer}</td>
                                         </tr>
                                     ))}
+                                    {filteredSalesLogs.length === 0 && (
+                                        <tr><td colSpan={7} className="px-6 py-8 text-center text-slate-400 italic">Belum ada data penjualan</td></tr>
+                                    )}
                                 </tbody>
+                                <tfoot className="bg-slate-50 font-black text-[10px] uppercase tracking-widest text-emerald-600 border-t-2 border-slate-200">
+                                    <tr>
+                                        <td colSpan={5} className="px-3 py-4 text-left border border-slate-200">TOTAL PENJUALAN TELUR</td>
+                                        <td className="px-3 py-4 text-right border border-slate-200 font-mono font-black">{formatCurrency(totalSalesTelur)}</td>
+                                        <td className="border border-slate-200"></td>
+                                    </tr>
+                                </tfoot>
                             </table>
                         </div>
                     </div>

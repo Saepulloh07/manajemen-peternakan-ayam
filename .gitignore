@@ -6,4 +6,4 @@ coverage/
 *.log
 .env*
 !.env.example
-.KANDANG 2.xlsx
+KANDANG 2.xlsx

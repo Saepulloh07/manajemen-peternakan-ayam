@@ -22,6 +22,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { UserRole } from '../types';
 import Swal from 'sweetalert2';
 import { useHouse } from '../HouseContext';
+import { useFlock } from '../FlockContext';
+import { FlockBatch } from '../types';
+import Modal from '../components/Modal';
+import { Calendar, Hash, User, Trash2, Edit2, CheckCircle2 } from 'lucide-react';
 
 export default function Settings() {
   const [activeSection, setActiveSection] = useState('HOUSES');
@@ -80,11 +84,33 @@ export default function Settings() {
 
   const sections = [
     { id: 'HOUSES', label: 'Manajemen Kandang', icon: Home },
+    { id: 'FLOCKS', label: 'Manajemen Batch/Flock', icon: Hash },
     { id: 'PROFILE', label: 'Profil Farm', icon: Smartphone },
     { id: 'SECURITY', label: 'Keamanan & Role', icon: ShieldCheck },
     { id: 'NOTIF', label: 'Notifikasi (WA)', icon: MessageSquare },
     { id: 'DATA', label: 'Backup & Arsip', icon: Database },
   ];
+
+  // --- Flock Management Logic ---
+  const { flocks, addFlock, updateFlock, deleteFlock } = useFlock();
+  const { selectedHouseId } = useHouse();
+  const [isFlockModalOpen, setIsFlockModalOpen] = useState(false);
+  const [editingFlock, setEditingFlock] = useState<FlockBatch | null>(null);
+
+  const houseFlocks = flocks.filter(f => f.houseId === selectedHouseId);
+
+  const calculateCurrentAge = (arrivalDate: string, arrivalAgeWeeks: number) => {
+    const start = new Date(arrivalDate);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    const totalDays = diffDays + (arrivalAgeWeeks * 7);
+    const weeks = Math.floor(totalDays / 7);
+    const days = totalDays % 7;
+    
+    return { weeks, days };
+  };
 
   return (
     <div className="space-y-8 pb-20">
@@ -116,6 +142,123 @@ export default function Settings() {
 
         <div className="lg:col-span-3">
             <AnimatePresence mode="wait">
+                {activeSection === 'FLOCKS' && (
+                    <motion.div
+                        initial={{ opacity: 0, x: 10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -10 }}
+                        key="flocks"
+                        className="space-y-8"
+                    >
+                        <div className="bg-white p-8 border border-slate-200 shadow-sm relative">
+                            <div className="flex items-center justify-between mb-8">
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight italic">Flock & Cycle Control</h3>
+                                    <p className="text-xs text-slate-500 mt-1 uppercase font-bold italic tracking-tighter opacity-70">Kelola batch ayam, umur, dan populasi aktif.</p>
+                                </div>
+                                <button 
+                                    onClick={() => {
+                                        setEditingFlock(null);
+                                        setIsFlockModalOpen(true);
+                                    }}
+                                    className="bg-slate-900 text-white p-3 rounded-full hover:bg-slate-800 transition-all shadow-lg"
+                                >
+                                    <Plus size={20} />
+                                </button>
+                            </div>
+
+                            <div className="space-y-4">
+                                {houseFlocks.length === 0 && (
+                                    <div className="text-center py-12 bg-slate-50 border border-dashed border-slate-200">
+                                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Belum ada batch di kandang ini</p>
+                                    </div>
+                                )}
+                                {houseFlocks.map((flock) => {
+                                    const age = calculateCurrentAge(flock.arrivalDate, flock.arrivalAgeWeeks);
+                                    return (
+                                        <div key={flock.id} className={cn(
+                                            "p-6 border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 group",
+                                            flock.isActive ? "bg-white border-amber-500 shadow-md ring-1 ring-amber-500/10" : "bg-slate-50 border-slate-100 opacity-70"
+                                        )}>
+                                            <div className="flex items-center space-x-4">
+                                                <div className={cn(
+                                                    "w-12 h-12 rounded-sm flex flex-col items-center justify-center font-black italic",
+                                                    flock.isActive ? "bg-amber-500 text-slate-900" : "bg-slate-200 text-slate-400"
+                                                )}>
+                                                    <span className="text-sm leading-none">{age.weeks}</span>
+                                                    <span className="text-[7px] uppercase tracking-tighter">Minggu</span>
+                                                </div>
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="text-[11px] font-black uppercase text-slate-900 tracking-tighter">{flock.strain}</p>
+                                                        {flock.isActive && <span className="text-[7px] bg-emerald-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase tracking-widest">Aktif</span>}
+                                                    </div>
+                                                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+                                                        Datang: {new Date(flock.arrivalDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} | Populasi: {flock.currentCount} Ekor
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="flex items-center gap-2">
+                                                <div className="text-right mr-4 hidden md:block">
+                                                    <p className="text-[10px] font-black text-slate-900 uppercase tracking-tighter italic">{age.weeks} Minggu {age.days} Hari</p>
+                                                    <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">Umur Saat Ini</p>
+                                                </div>
+                                                <button 
+                                                    onClick={() => {
+                                                        setEditingFlock(flock);
+                                                        setIsFlockModalOpen(true);
+                                                    }}
+                                                    className="p-2 text-slate-400 hover:text-slate-900 transition-colors"
+                                                >
+                                                    <Edit2 size={16} />
+                                                </button>
+                                                <button 
+                                                    onClick={() => {
+                                                        Swal.fire({
+                                                            title: 'Hapus Batch?',
+                                                            text: 'Seluruh data batch ini akan dihapus permanen.',
+                                                            icon: 'warning',
+                                                            showCancelButton: true,
+                                                            confirmButtonColor: '#e11d48',
+                                                            confirmButtonText: 'Ya, Hapus',
+                                                            cancelButtonText: 'Batal'
+                                                        }).then(result => {
+                                                            if (result.isConfirmed) deleteFlock(flock.id);
+                                                        });
+                                                    }}
+                                                    className="p-2 text-slate-400 hover:text-rose-600 transition-colors"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <Modal
+                            isOpen={isFlockModalOpen}
+                            onClose={() => setIsFlockModalOpen(false)}
+                            title={editingFlock ? "Edit Batch/Flock" : "Tambah Batch Baru"}
+                        >
+                            <FlockForm 
+                                houseId={selectedHouseId}
+                                flock={editingFlock}
+                                onSave={(data) => {
+                                    if (editingFlock) {
+                                        updateFlock(editingFlock.id, data);
+                                    } else {
+                                        addFlock(data);
+                                    }
+                                    setIsFlockModalOpen(false);
+                                }}
+                            />
+                        </Modal>
+                    </motion.div>
+                )}
+
                 {activeSection === 'HOUSES' && (
                     <motion.div
                         initial={{ opacity: 0, x: 10 }}
@@ -296,4 +439,111 @@ export default function Settings() {
       </div>
     </div>
   );
+}
+
+interface FlockFormProps {
+    houseId: string;
+    flock: FlockBatch | null;
+    onSave: (data: Omit<FlockBatch, 'id'>) => void;
+}
+
+function FlockForm({ houseId, flock, onSave }: FlockFormProps) {
+    const [strain, setStrain] = useState(flock?.strain || '');
+    const [arrivalDate, setArrivalDate] = useState(flock?.arrivalDate || new Date().toISOString().split('T')[0]);
+    const [arrivalAgeWeeks, setArrivalAgeWeeks] = useState(flock?.arrivalAgeWeeks || 0);
+    const [initialCount, setInitialCount] = useState(flock?.initialCount || 0);
+    const [isActive, setIsActive] = useState(flock?.isActive ?? true);
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onSave({
+            houseId,
+            strain,
+            arrivalDate,
+            arrivalAgeWeeks,
+            initialCount,
+            currentCount: flock?.currentCount || initialCount,
+            isActive
+        });
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Strain / Jenis Ayam</label>
+                    <input
+                        type="text"
+                        required
+                        value={strain}
+                        onChange={(e) => setStrain(e.target.value)}
+                        placeholder="Contoh: Isa Brown, Lohmann, Hisex"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-500"
+                    />
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Tanggal Datang</label>
+                    <div className="relative">
+                        <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input
+                            type="date"
+                            required
+                            value={arrivalDate}
+                            onChange={(e) => setArrivalDate(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-sm pl-12 pr-4 py-3 text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-500"
+                        />
+                    </div>
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Umur Saat Datang (Mg)</label>
+                    <input
+                        type="number"
+                        required
+                        min="0"
+                        value={arrivalAgeWeeks}
+                        onChange={(e) => setArrivalAgeWeeks(Number(e.target.value))}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-500"
+                    />
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Populasi Awal (Ekor)</label>
+                    <div className="relative">
+                        <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input
+                            type="number"
+                            required
+                            min="1"
+                            value={initialCount}
+                            onChange={(e) => setInitialCount(Number(e.target.value))}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-sm pl-12 pr-4 py-3 text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-500"
+                        />
+                    </div>
+                </div>
+                <div className="col-span-2 sm:col-span-1 flex items-end">
+                    <label className="flex items-center space-x-3 cursor-pointer p-3 bg-slate-50 border border-slate-100 w-full hover:bg-slate-100 transition-colors">
+                        <div className={cn(
+                            "w-5 h-5 rounded-sm border flex items-center justify-center transition-all",
+                            isActive ? "bg-amber-500 border-amber-600 shadow-inner" : "bg-white border-slate-200"
+                        )}>
+                            {isActive && <CheckCircle2 size={14} className="text-white" />}
+                            <input
+                                type="checkbox"
+                                className="hidden"
+                                checked={isActive}
+                                onChange={(e) => setIsActive(e.target.checked)}
+                            />
+                        </div>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Batch Aktif</span>
+                    </label>
+                </div>
+            </div>
+
+            <button
+                type="submit"
+                className="w-full bg-slate-900 text-white py-4 rounded-sm font-bold text-[10px] uppercase tracking-[0.2em] hover:bg-slate-800 transition-all shadow-lg"
+            >
+                Simpan Konfigurasi Batch
+            </button>
+        </form>
+    );
 }
