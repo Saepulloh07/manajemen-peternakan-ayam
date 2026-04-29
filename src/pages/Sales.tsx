@@ -40,7 +40,7 @@ import { useGlobalData } from '../GlobalContext';
 
 export default function Sales() {
   const { activeHouse } = useHouse();
-  const { saveSale, salesLogs, inventory, updateInventory } = useGlobalData();
+  const { saveSale, salesLogs, inventory, updateInventory, farmSettings } = useGlobalData();
   const [activeCategory, setActiveCategory] = useState<string>(EggCategory.BM);
   const [quantity, setQuantity] = useState(0);
   const [isFree, setIsFree] = useState(false);
@@ -335,18 +335,29 @@ export default function Sales() {
                 </div>
                 <h3 className="text-amber-500 text-[10px] font-black uppercase tracking-[0.25em] mb-8">Financial Summary</h3>
                 <div className="space-y-8">
-                    <div>
-                        <p className="text-3xl font-black italic tracking-tighter">142.5 kg</p>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Total Telur Terjual (Today)</p>
-                    </div>
-                    <div>
-                        <p className="text-3xl font-black italic text-slate-600 tracking-tighter">3%</p>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Waste & Free Goods</p>
-                    </div>
-                    <div className="pt-8 border-t border-slate-800">
-                        <p className="text-3xl font-black text-emerald-400 italic tracking-tighter">{formatCurrency(3850000)}</p>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Cashflow {activeHouse?.name} Today</p>
-                    </div>
+                    {(() => {
+                        const today = new Date().toISOString().split('T')[0];
+                        const houseSales = salesLogs.filter(s => s.houseId === activeHouse?.id && s.date === today);
+                        const totalSold = houseSales.reduce((acc, s) => acc + s.quantity, 0);
+                        const totalIncome = houseSales.reduce((acc, s) => acc + s.total, 0);
+                        
+                        return (
+                            <>
+                                <div>
+                                    <p className="text-3xl font-black italic tracking-tighter">{totalSold.toFixed(2)} Unit</p>
+                                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Total Terjual (Today)</p>
+                                </div>
+                                <div>
+                                    <p className="text-3xl font-black italic text-slate-600 tracking-tighter">{farmSettings.wasteFreePercentage}%</p>
+                                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Target Waste & Free Goods</p>
+                                </div>
+                                <div className="pt-8 border-t border-slate-800">
+                                    <p className="text-3xl font-black text-emerald-400 italic tracking-tighter">{formatCurrency(totalIncome)}</p>
+                                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Cashflow {activeHouse?.name} Today</p>
+                                </div>
+                            </>
+                        );
+                    })()}
                 </div>
             </div>
 

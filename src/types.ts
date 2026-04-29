@@ -209,6 +209,14 @@ export interface FarmSettings {
   globalTargetHDP: number;           // default % HDP target (e.g. 90)
   mortalityAlertThreshold: number;   // % per month (e.g. 0.5)
   lowHDPAlertThreshold: number;      // % below standard before alert (e.g. 5)
+  targetFCR: number;                 // Feed Conversion Ratio Target
+  stdFeedIntake: number;             // Standard feed intake per layer (e.g. 115g)
+  
+  // Master Data
+  strains: string[];                 // Isa Brown, Lohmann, etc.
+  units: string[];                   // kg, liter, ml, etc.
+  wasteFreePercentage: number;       // Target/Limit for Waste & Free Goods
+  
   // Capital
   initialCapital: number;            // global modal awal farm
   // Depreciation
@@ -222,6 +230,11 @@ export const DEFAULT_FARM_SETTINGS: FarmSettings = {
   globalTargetHDP: 90,
   mortalityAlertThreshold: 0.5,
   lowHDPAlertThreshold: 5,
+  targetFCR: 2.1,
+  stdFeedIntake: 115,
+  strains: ['Isa Brown', 'Lohmann', 'Hy-Line', 'Hisex'],
+  units: ['kg', 'liter', 'ml', 'papan', 'butir', 'sak'],
+  wasteFreePercentage: 3,
   initialCapital: 0,
   cageValueTotal: 500000000,
   cageLifeYears: 10,

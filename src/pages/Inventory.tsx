@@ -36,7 +36,7 @@ const ITEM_TYPE_LABELS: Record<string, string> = {
 
 export default function Inventory() {
   const { activeHouse } = useHouse();
-  const { inventory, updateInventory, addInventoryItem, addTransaction, transactions, productionLogs } = useGlobalData();
+  const { inventory, updateInventory, addInventoryItem, addTransaction, transactions, productionLogs, farmSettings } = useGlobalData();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
@@ -160,12 +160,11 @@ export default function Inventory() {
               <select 
                 value={newItem.unit}
                 onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500 transition-all"
+                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500 transition-all uppercase"
               >
-                <option value="kg">KILOGRAM (KG)</option>
-                <option value="sak">SAK (50KG)</option>
-                <option value="liter">LITER</option>
-                <option value="btl">BOTOL</option>
+                {farmSettings.units.map(unit => (
+                  <option key={unit} value={unit}>{unit}</option>
+                ))}
               </select>
             </div>
           <div>
@@ -320,7 +319,7 @@ export default function Inventory() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
-                            {transactions.filter(t => t.type === 'EXPENSE').slice(-5).reverse().map((tx) => (
+                            {transactions.filter(t => t.type === 'EXPENSE' && !t.description.includes('Gaji') && !t.description.includes('Borongan')).slice(-5).reverse().map((tx) => (
                                 <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-6 py-4 text-xs font-bold text-slate-800 uppercase tracking-tight">{tx.description}</td>
                                     <td className="px-6 py-4">
@@ -403,6 +402,16 @@ export default function Inventory() {
                     readOnly
                     className="w-full bg-slate-100 border border-slate-200 rounded-sm px-4 py-3 text-sm text-slate-500 cursor-not-allowed"
                 />
+            </div>
+            <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Satuan</label>
+                <select 
+                    value={editingItem?.unit || ''}
+                    onChange={(e) => setEditingItem({ ...editingItem, unit: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500"
+                >
+                    {farmSettings.units.map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
             </div>
             <div>
                 <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Stok Saat Ini ({editingItem?.unit})</label>

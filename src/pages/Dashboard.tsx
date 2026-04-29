@@ -86,7 +86,7 @@ function KpiCard({ label, value, sub, icon: Icon, trend, trendLabel, accentClass
 export default function Dashboard() {
   const { activeHouse } = useHouse();
   const { getActiveFlockByHouse } = useFlock();
-  const { productionLogs, salesLogs, inventory, mortalityRecords, transactions } = useGlobalData();
+  const { productionLogs, salesLogs, inventory, mortalityRecords, transactions, farmSettings } = useGlobalData();
 
   const [chartPeriod, setChartPeriod] = useState<7 | 14 | 30>(7);
 
@@ -199,28 +199,29 @@ export default function Dashboard() {
         <KpiCard
           label="FCR Kumulatif"
           value={cumulativeFCR.toFixed(2)}
-          sub={`Target: < 2.10 · Feed: ${feedIntakePerBird.toFixed(0)}g/ekor`}
+          sub={`Target: < ${farmSettings.targetFCR.toFixed(2)}`}
           icon={TrendingUp}
-          trend={cumulativeFCR < 2.10 ? 'up' : 'down'}
-          trendLabel={cumulativeFCR < 2.10 ? 'Efisien' : 'Di atas target'}
+          trend={cumulativeFCR < farmSettings.targetFCR ? 'up' : 'down'}
+          trendLabel={cumulativeFCR < farmSettings.targetFCR ? 'Efisien' : 'Di atas target'}
+        />
+        <KpiCard
+          label="Intake / Ekor"
+          value={feedIntakePerBird.toFixed(0) + 'g'}
+          sub={`Std: ${farmSettings.stdFeedIntake}g`}
+          icon={Flame}
+          progress={(feedIntakePerBird / farmSettings.stdFeedIntake) * 100}
+          trend={Math.abs(feedIntakePerBird - farmSettings.stdFeedIntake) < 5 ? 'neutral' : feedIntakePerBird > farmSettings.stdFeedIntake ? 'down' : 'up'}
+          trendLabel={Math.abs(feedIntakePerBird - farmSettings.stdFeedIntake) < 5 ? 'Normal' : feedIntakePerBird > farmSettings.stdFeedIntake ? 'Boros' : 'Kurang'}
+          accentClass={Math.abs(feedIntakePerBird - farmSettings.stdFeedIntake) > 10 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}
         />
         <KpiCard
           label="Mortalitas Siklus"
           value={`${mortalityPct.toFixed(2)}%`}
-          sub={`${totalMortality.toLocaleString()} ekor · Batas: 0.5%/bln`}
+          sub={`Batas: ${farmSettings.mortalityAlertThreshold}%/bln`}
           icon={Skull}
-          trend={mortalityPct < 0.5 ? 'up' : 'down'}
-          trendLabel={mortalityPct < 0.5 ? 'Aman' : 'Perhatian!'}
-          accentClass={mortalityPct >= 0.5 ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200'}
-        />
-        <KpiCard
-          label="P&L Siklus"
-          value={formatCurrency(netPL)}
-          sub={`Pendapatan: ${formatCurrency(totalRevenue)}`}
-          icon={DollarSign}
-          trend={netPL > 0 ? 'up' : 'down'}
-          trendLabel={netPL > 0 ? 'Profit' : 'Rugi'}
-          accentClass={netPL > 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}
+          trend={mortalityPct < farmSettings.mortalityAlertThreshold ? 'up' : 'down'}
+          trendLabel={mortalityPct < farmSettings.mortalityAlertThreshold ? 'Aman' : 'Perhatian!'}
+          accentClass={mortalityPct >= farmSettings.mortalityAlertThreshold ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200'}
         />
       </div>
 
@@ -310,12 +311,12 @@ export default function Dashboard() {
             {/* FCR Alert */}
             <div className="flex gap-3 items-start border-t border-slate-800 pt-5">
               <div className={cn('w-1.5 h-1.5 rounded-full mt-1.5 ring-4 shrink-0',
-                cumulativeFCR < 2.10 ? 'bg-emerald-500 ring-emerald-500/20' : 'bg-amber-500 ring-amber-500/20')} />
+                cumulativeFCR < farmSettings.targetFCR ? 'bg-emerald-500 ring-emerald-500/20' : 'bg-amber-500 ring-amber-500/20')} />
               <div>
-                <p className={cn('text-xs font-bold', cumulativeFCR < 2.10 ? 'text-emerald-400' : 'text-amber-400')}>
-                  FCR {cumulativeFCR > 0 ? cumulativeFCR.toFixed(2) : '-'} · {cumulativeFCR < 2.10 ? 'Efisien' : 'Di atas target'}
+                <p className={cn('text-xs font-bold', cumulativeFCR < farmSettings.targetFCR ? 'text-emerald-400' : 'text-amber-400')}>
+                  FCR {cumulativeFCR > 0 ? cumulativeFCR.toFixed(2) : '-'} · {cumulativeFCR < farmSettings.targetFCR ? 'Efisien' : 'Di atas target'}
                 </p>
-                <p className="text-[10px] text-slate-400 mt-0.5">Target ideal strain: &lt; 2.10</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">Target ideal: &lt; {farmSettings.targetFCR.toFixed(2)}</p>
               </div>
             </div>
           </div>
@@ -424,7 +425,7 @@ export default function Dashboard() {
                 { label: 'Populasi Aktif', value: currentCount.toLocaleString() + ' ekor' },
                 { label: 'Total Produksi', value: totalEggKg.toFixed(1) + ' kg' },
                 { label: 'Total Pakan', value: totalFeed.toFixed(1) + ' kg' },
-                { label: 'Pendapatan', value: formatCurrency(totalRevenue) },
+                { label: 'Net Profit', value: formatCurrency(netPL) },
               ].map(s => (
                 <div key={s.label} className="flex justify-between">
                   <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">{s.label}</span>

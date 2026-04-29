@@ -26,12 +26,14 @@ import { useHouse } from '../HouseContext';
 import { useApp } from '../AppContext';
 import { useFlock } from '../FlockContext';
 import Modal from '../components/Modal';
+import { useGlobalData } from '../GlobalContext';
 
 export default function Settings() {
   const [activeSection, setActiveSection] = useState('HOUSES');
   const { houses, addHouse, updateHouse, deleteHouse, selectedHouseId } = useHouse();
   const { users, addUser, updateUser, deleteUser, sidebarPermissions, updatePermissions } = useApp();
   const { flocks, addFlock, updateFlock, deleteFlock } = useFlock();
+  const { farmSettings, saveFarmSettings } = useGlobalData();
   
   // --- House Management State ---
   const [isHouseModalOpen, setIsHouseModalOpen] = useState(false);
@@ -53,7 +55,8 @@ export default function Settings() {
     { id: 'FLOCKS', label: 'Manajemen Batch/Flock', icon: Hash },
     { id: 'PROFILE', label: 'Profil Farm (User)', icon: Smartphone },
     { id: 'SECURITY', label: 'Keamanan & Role', icon: ShieldCheck },
-    { id: 'DATA', label: 'Backup & Arsip', icon: Database },
+    { id: 'MASTER', label: 'Master Data & Standar', icon: Database },
+    { id: 'DATA', label: 'Backup & Arsip', icon: RotateCcw },
   ];
 
   const calculateHouseStatus = (house: PoultryHouse) => {
@@ -523,6 +526,182 @@ export default function Settings() {
                         </Modal>
                     </motion.div>
                 )}
+                {activeSection === 'MASTER' && (
+                    <motion.div
+                        initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
+                        key="master" className="space-y-8"
+                    >
+                        <div className="bg-white p-8 border border-slate-200 shadow-sm">
+                            <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight italic mb-8">Master Data & Standar Operasional</h3>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                                {/* Production Targets */}
+                                <div className="space-y-6">
+                                    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600 flex items-center gap-2">
+                                        <Shield size={14} /> Target & Batas Toleransi
+                                    </h4>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Target HDP (%)</label>
+                                            <input 
+                                                type="number" 
+                                                value={farmSettings.globalTargetHDP} 
+                                                onChange={(e) => saveFarmSettings({ globalTargetHDP: Number(e.target.value) })}
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:border-amber-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Target FCR</label>
+                                            <input 
+                                                type="number" 
+                                                step="0.01"
+                                                value={farmSettings.targetFCR} 
+                                                onChange={(e) => saveFarmSettings({ targetFCR: Number(e.target.value) })}
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:border-amber-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Batas Mortalitas / Bulan (%)</label>
+                                            <input 
+                                                type="number" 
+                                                step="0.1"
+                                                value={farmSettings.mortalityAlertThreshold} 
+                                                onChange={(e) => saveFarmSettings({ mortalityAlertThreshold: Number(e.target.value) })}
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:border-amber-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Std. Intake Pakan (g/ekor)</label>
+                                            <input 
+                                                type="number" 
+                                                value={farmSettings.stdFeedIntake} 
+                                                onChange={(e) => saveFarmSettings({ stdFeedIntake: Number(e.target.value) })}
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:border-amber-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Waste & Free Goods (%)</label>
+                                            <input 
+                                                type="number" 
+                                                step="0.1"
+                                                value={farmSettings.wasteFreePercentage} 
+                                                onChange={(e) => saveFarmSettings({ wasteFreePercentage: Number(e.target.value) })}
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:border-amber-500"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* List Management */}
+                                <div className="space-y-8">
+                                    {/* Strains */}
+                                    <div className="space-y-4">
+                                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-900 flex items-center justify-between">
+                                            <span>Daftar Strain Ayam</span>
+                                            <button 
+                                                onClick={() => {
+                                                    Swal.fire({
+                                                        title: 'Tambah Strain',
+                                                        input: 'text',
+                                                        inputPlaceholder: 'Masukkan nama strain...',
+                                                        showCancelButton: true,
+                                                        confirmButtonColor: '#0f172a',
+                                                    }).then(result => {
+                                                        if (result.isConfirmed && result.value) {
+                                                            saveFarmSettings({ strains: [...farmSettings.strains, result.value] });
+                                                        }
+                                                    });
+                                                }}
+                                                className="p-1 hover:text-amber-500 transition-colors"
+                                            ><Plus size={14} /></button>
+                                        </h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            {farmSettings.strains.map(s => (
+                                                <div key={s} className="flex items-center gap-2 bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-sm group">
+                                                    <span className="text-[10px] font-bold text-slate-600">{s}</span>
+                                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                                        <button 
+                                                            onClick={() => {
+                                                                Swal.fire({
+                                                                    title: 'Edit Strain',
+                                                                    input: 'text',
+                                                                    inputValue: s,
+                                                                    showCancelButton: true,
+                                                                    confirmButtonColor: '#0f172a',
+                                                                }).then(result => {
+                                                                    if (result.isConfirmed && result.value) {
+                                                                        saveFarmSettings({ strains: farmSettings.strains.map(i => i === s ? result.value : i) });
+                                                                    }
+                                                                });
+                                                            }}
+                                                            className="text-slate-300 hover:text-amber-500"
+                                                        ><Edit2 size={10} /></button>
+                                                        <button 
+                                                            onClick={() => saveFarmSettings({ strains: farmSettings.strains.filter(i => i !== s) })}
+                                                            className="text-slate-300 hover:text-rose-500"
+                                                        ><Trash2 size={10} /></button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Units */}
+                                    <div className="space-y-4">
+                                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-900 flex items-center justify-between">
+                                            <span>Daftar Satuan (Units)</span>
+                                            <button 
+                                                onClick={() => {
+                                                    Swal.fire({
+                                                        title: 'Tambah Satuan',
+                                                        input: 'text',
+                                                        inputPlaceholder: 'kg, liter, ml, dll...',
+                                                        showCancelButton: true,
+                                                        confirmButtonColor: '#0f172a',
+                                                    }).then(result => {
+                                                        if (result.isConfirmed && result.value) {
+                                                            saveFarmSettings({ units: [...farmSettings.units, result.value] });
+                                                        }
+                                                    });
+                                                }}
+                                                className="p-1 hover:text-amber-500 transition-colors"
+                                            ><Plus size={14} /></button>
+                                        </h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            {farmSettings.units.map(u => (
+                                                <div key={u} className="flex items-center gap-2 bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-sm group">
+                                                    <span className="text-[10px] font-bold text-slate-600">{u}</span>
+                                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                                        <button 
+                                                            onClick={() => {
+                                                                Swal.fire({
+                                                                    title: 'Edit Satuan',
+                                                                    input: 'text',
+                                                                    inputValue: u,
+                                                                    showCancelButton: true,
+                                                                    confirmButtonColor: '#0f172a',
+                                                                }).then(result => {
+                                                                    if (result.isConfirmed && result.value) {
+                                                                        saveFarmSettings({ units: farmSettings.units.map(i => i === u ? result.value : i) });
+                                                                    }
+                                                                });
+                                                            }}
+                                                            className="text-slate-300 hover:text-amber-500"
+                                                        ><Edit2 size={10} /></button>
+                                                        <button 
+                                                            onClick={() => saveFarmSettings({ units: farmSettings.units.filter(i => i !== u) })}
+                                                            className="text-slate-300 hover:text-rose-500"
+                                                        ><Trash2 size={10} /></button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
             </AnimatePresence>
         </div>
       </div>
@@ -537,6 +716,7 @@ interface FlockFormProps {
 }
 
 function FlockForm({ houseId, flock, onSave }: FlockFormProps) {
+    const { farmSettings } = useGlobalData();
     const [strain, setStrain] = useState(flock?.strain || '');
     const [arrivalDate, setArrivalDate] = useState(flock?.arrivalDate || new Date().toISOString().split('T')[0]);
     const [arrivalAgeWeeks, setArrivalAgeWeeks] = useState(flock?.arrivalAgeWeeks || 0);
@@ -561,11 +741,13 @@ function FlockForm({ houseId, flock, onSave }: FlockFormProps) {
             <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Strain / Jenis Ayam</label>
-                    <input
-                        type="text" required value={strain} onChange={(e) => setStrain(e.target.value)}
-                        placeholder="Contoh: Isa Brown, Lohmann, Hisex"
+                    <select
+                        required value={strain} onChange={(e) => setStrain(e.target.value)}
                         className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-500"
-                    />
+                    >
+                        <option value="">Pilih Strain</option>
+                        {farmSettings.strains.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
                 </div>
                 <div className="col-span-2 sm:col-span-1">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Tanggal Datang</label>
