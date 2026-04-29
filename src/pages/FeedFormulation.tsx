@@ -15,7 +15,7 @@ export default function FeedFormulation() {
     const { inventory, updateInventory, recipes, addRecipe, updateRecipe, deleteRecipe } = useGlobalData();
     const [selectedRecipeId, setSelectedRecipeId] = useState(recipes.length > 0 ? recipes[0].id : '');
     const [targetProductionKg, setTargetProductionKg] = useState<number>(1000);
-    const [outputItemId, setOutputItemId] = useState(''); // which FINISHED_FEED to add to
+    const [outputItemId, setOutputItemId] = useState('');
 
     // Modal States
     const [isMasterModalOpen, setIsMasterModalOpen] = useState(false);
@@ -41,7 +41,7 @@ export default function FeedFormulation() {
         return activeRecipe.ingredients.map((ing: any) => {
             const neededKg = (ing.percentage / 100) * targetProductionKg;
             const inventoryItem = inventory.find(item => item.id === ing.inventoryItemId);
-            const currentStock = inventoryItem ? inventoryItem.quantity : 0;   // ← FIX: was .stock
+            const currentStock = inventoryItem ? inventoryItem.quantity : 0;
             const isEnough = currentStock >= neededKg;
 
             return {
