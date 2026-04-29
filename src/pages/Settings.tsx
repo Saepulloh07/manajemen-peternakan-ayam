@@ -1,103 +1,73 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
-  Settings as SettingsIcon, 
   ShieldCheck, 
   RotateCcw, 
-  MessageSquare, 
-  Bell, 
   Smartphone,
   ChevronRight,
   Database,
-  Users,
   Home,
-  Plus
+  Plus,
+  Calendar, 
+  Hash, 
+  User as UserIcon, 
+  Trash2, 
+  Edit2, 
+  CheckCircle2,
+  Layout as LayoutIcon,
+  Save,
+  Shield,
+  Search
 } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { formatCurrency, cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
-import { UserRole } from '../types';
+import { UserRole, User, PoultryHouse, FlockBatch } from '../types';
 import Swal from 'sweetalert2';
 import { useHouse } from '../HouseContext';
+import { useApp } from '../AppContext';
 import { useFlock } from '../FlockContext';
-import { FlockBatch } from '../types';
 import Modal from '../components/Modal';
-import { Calendar, Hash, User, Trash2, Edit2, CheckCircle2 } from 'lucide-react';
 
 export default function Settings() {
   const [activeSection, setActiveSection] = useState('HOUSES');
-  const { houses, addHouse } = useHouse();
+  const { houses, addHouse, updateHouse, deleteHouse, selectedHouseId } = useHouse();
+  const { users, addUser, updateUser, deleteUser, sidebarPermissions, updatePermissions } = useApp();
+  const { flocks, addFlock, updateFlock, deleteFlock } = useFlock();
+  
+  // --- House Management State ---
+  const [isHouseModalOpen, setIsHouseModalOpen] = useState(false);
+  const [editingHouse, setEditingHouse] = useState<PoultryHouse | null>(null);
 
-  const handleAddHouse = async () => {
-    const { value: name } = await Swal.fire({
-      title: 'Tambah Kandang Baru',
-      input: 'text',
-      inputLabel: 'Nama Kandang',
-      inputPlaceholder: 'Contoh: Kandang C',
-      showCancelButton: true,
-      confirmButtonColor: '#0f172a',
-    });
+  // --- Profile Farm State ---
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
 
-    if (name) {
-      addHouse(name);
-      Swal.fire({
-        title: 'Berhasil!',
-        text: `Kandang ${name} telah ditambahkan.`,
-        icon: 'success',
-        confirmButtonColor: '#0f172a',
-      });
-    }
-  };
+  // --- Flock Management State ---
+  const [isFlockModalOpen, setIsFlockModalOpen] = useState(false);
+  const [editingFlock, setEditingFlock] = useState<FlockBatch | null>(null);
 
-  const handleExport = () => {
-    Swal.fire({
-      title: 'Export Data?',
-      text: 'Seluruh registry akan dieksport ke format .csv',
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonColor: '#0f172a',
-      confirmButtonText: 'Export Now',
-    }).then((result) => {
-      if (result.isConfirmed) {
-        Swal.fire({
-          title: 'Exporting...',
-          text: 'Harap tunggu sebentar.',
-          allowOutsideClick: false,
-          didOpen: () => {
-            Swal.showLoading();
-            setTimeout(() => {
-              Swal.fire({
-                title: 'Export Berhasil!',
-                text: 'File telah diunduh.',
-                icon: 'success',
-                confirmButtonColor: '#0f172a',
-              });
-            }, 1500);
-          }
-        });
-      }
-    });
-  };
+  // --- Security State ---
+  const [selectedRoleForSecurity, setSelectedRoleForSecurity] = useState<UserRole>(UserRole.ADMIN);
 
   const sections = [
     { id: 'HOUSES', label: 'Manajemen Kandang', icon: Home },
     { id: 'FLOCKS', label: 'Manajemen Batch/Flock', icon: Hash },
-    { id: 'PROFILE', label: 'Profil Farm', icon: Smartphone },
+    { id: 'PROFILE', label: 'Profil Farm (User)', icon: Smartphone },
     { id: 'SECURITY', label: 'Keamanan & Role', icon: ShieldCheck },
-    { id: 'NOTIF', label: 'Notifikasi (WA)', icon: MessageSquare },
     { id: 'DATA', label: 'Backup & Arsip', icon: Database },
   ];
 
-  // --- Flock Management Logic ---
-  const { flocks, addFlock, updateFlock, deleteFlock } = useFlock();
-  const { selectedHouseId } = useHouse();
-  const [isFlockModalOpen, setIsFlockModalOpen] = useState(false);
-  const [editingFlock, setEditingFlock] = useState<FlockBatch | null>(null);
-
-  const houseFlocks = flocks.filter(f => f.houseId === selectedHouseId);
+  const calculateHouseStatus = (house: PoultryHouse) => {
+    if (!house.purchaseDate || !house.purchasePrice) return 'Kondisi Prima (Baru)';
+    
+    const purchaseDate = new Date(house.purchaseDate);
+    const now = new Date();
+    const ageMonths = (now.getFullYear() - purchaseDate.getFullYear()) * 12 + (now.getMonth() - purchaseDate.getMonth());
+    
+    if (ageMonths < 12) return 'Sangat Baik (Siklus Awal)';
+    if (ageMonths < 60) return 'Baik (Penyusutan Normal)';
+    if (ageMonths < 100) return 'Perlu Perawatan (Menjelang Afkir)';
+    return 'Afkir / Perlu Renovasi Total';
+  };
 
   const calculateCurrentAge = (arrivalDate: string, arrivalAgeWeeks: number) => {
     const start = new Date(arrivalDate);
@@ -112,11 +82,64 @@ export default function Settings() {
     return { weeks, days };
   };
 
+  const handleSaveHouse = (e: React.FormEvent) => {
+    e.preventDefault();
+    const formData = new FormData(e.target as HTMLFormElement);
+    const name = formData.get('name') as string;
+    const capacity = Number(formData.get('capacity'));
+    const managerId = formData.get('managerId') as string;
+    const purchaseDate = formData.get('purchaseDate') as string;
+    const purchasePrice = Number(formData.get('purchasePrice'));
+
+    if (editingHouse) {
+      updateHouse(editingHouse.id, { name, capacity, managerId, purchaseDate, purchasePrice });
+    } else {
+      addHouse(name, capacity, managerId, purchaseDate, purchasePrice);
+    }
+    
+    Swal.fire({ title: 'Berhasil!', text: 'Data kandang telah disimpan.', icon: 'success', confirmButtonColor: '#0f172a' });
+    setIsHouseModalOpen(false);
+  };
+
+  const handleSaveUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    const formData = new FormData(e.target as HTMLFormElement);
+    const name = formData.get('name') as string;
+    const email = formData.get('email') as string;
+    const username = formData.get('username') as string;
+    const password = formData.get('password') as string;
+    const role = formData.get('role') as UserRole;
+    const salary = Number(formData.get('salary'));
+
+    if (editingUser) {
+      updateUser(editingUser.id, { name, email, username, password, role, salary });
+    } else {
+      addUser({ name, email, username, password, role, salary, assignedHouses: [] });
+    }
+
+    Swal.fire({ title: 'Berhasil!', text: 'Data pengguna telah disimpan.', icon: 'success', confirmButtonColor: '#0f172a' });
+    setIsUserModalOpen(false);
+  };
+
+  const ALL_SIDEBAR_ITEMS = [
+    { id: 'dashboard', label: 'Dashboard' },
+    { id: 'production', label: 'Produksi Harian' },
+    { id: 'feedFormulation', label: 'Formulasi Pakan' },
+    { id: 'vaccine', label: 'Vaksin & Biosekuriti' },
+    { id: 'sales', label: 'Penjualan Telur' },
+    { id: 'inventory', label: 'Stok Logistik' },
+    { id: 'finance', label: 'Keuangan & Aset' },
+    { id: 'workers', label: 'SDM & Payroll' },
+    { id: 'settings', label: 'Konfigurasi' },
+  ];
+
+  const houseFlocks = flocks.filter(f => f.houseId === selectedHouseId);
+
   return (
     <div className="space-y-8 pb-20">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Pengaturan Sistem</h1>
-        <p className="text-slate-500 text-sm mt-1">Konfigurasi hak akses, notifikasi WhatsApp, dan cadangan data.</p>
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight italic uppercase">Farm System configuration</h1>
+        <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Kelola infrastruktur, keamanan, dan profil personil farm.</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
@@ -142,13 +165,277 @@ export default function Settings() {
 
         <div className="lg:col-span-3">
             <AnimatePresence mode="wait">
+                {activeSection === 'HOUSES' && (
+                    <motion.div
+                        initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
+                        key="houses" className="space-y-8"
+                    >
+                        <div className="bg-white p-8 border border-slate-200 shadow-sm relative">
+                            <div className="flex items-center justify-between mb-8">
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight italic">House Management</h3>
+                                    <p className="text-xs text-slate-500 mt-1 uppercase font-bold italic tracking-tighter opacity-70">Konfigurasi infrastruktur kandang dan status penyusutan.</p>
+                                </div>
+                                <button 
+                                    onClick={() => { setEditingHouse(null); setIsHouseModalOpen(true); }}
+                                    className="bg-slate-900 text-white p-3 rounded-full hover:bg-slate-800 transition-all shadow-lg"
+                                >
+                                    <Plus size={20} />
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {houses.map((house) => {
+                                  const manager = users.find(u => u.id === house.managerId);
+                                  const status = calculateHouseStatus(house);
+                                  return (
+                                    <div 
+                                      key={house.id} 
+                                      onClick={() => { setEditingHouse(house); setIsHouseModalOpen(true); }}
+                                      className="p-6 bg-slate-50 border border-slate-100 hover:border-amber-500 transition-all group cursor-pointer relative"
+                                    >
+                                        <div className="flex items-center space-x-4">
+                                            <div className="w-12 h-12 bg-white border border-slate-200 rounded-sm flex items-center justify-center text-slate-400 group-hover:bg-slate-900 group-hover:text-amber-500 transition-all">
+                                                <Home size={24} />
+                                            </div>
+                                            <div>
+                                                <p className="text-[12px] font-black uppercase text-slate-900 tracking-tighter italic">{house.name}</p>
+                                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">PJ: {manager?.name || 'Belum diatur'}</p>
+                                            </div>
+                                        </div>
+                                        <div className="mt-4 pt-4 border-t border-slate-200 flex justify-between items-end">
+                                          <div>
+                                            <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest mb-1">Status Kondisi</p>
+                                            <p className={cn("text-[9px] font-black uppercase italic", status.includes('Afkir') ? 'text-rose-600' : status.includes('Perlu') ? 'text-amber-600' : 'text-emerald-600')}>
+                                              {status}
+                                            </p>
+                                          </div>
+                                          <div className="flex space-x-2">
+                                            <div className="p-1.5 bg-white border border-slate-200 text-slate-400 group-hover:text-slate-900"><Edit2 size={12} /></div>
+                                            <div onClick={(e) => { e.stopPropagation(); deleteHouse(house.id); }} className="p-1.5 bg-white border border-slate-200 text-slate-400 hover:text-rose-600"><Trash2 size={12} /></div>
+                                          </div>
+                                        </div>
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                        </div>
+
+                        <Modal isOpen={isHouseModalOpen} onClose={() => setIsHouseModalOpen(false)} title={editingHouse ? `Edit: ${editingHouse.name}` : "Tambah Kandang Baru"}>
+                            <form onSubmit={handleSaveHouse} className="space-y-6">
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="col-span-2">
+                                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Nama Kandang</label>
+                                  <input name="name" required defaultValue={editingHouse?.name} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+                                </div>
+                                <div className="col-span-1">
+                                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Kapasitas (Ekor)</label>
+                                  <input name="capacity" type="number" defaultValue={editingHouse?.capacity || 5000} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+                                </div>
+                                <div className="col-span-1">
+                                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Penanggungjawab</label>
+                                  <select name="managerId" defaultValue={editingHouse?.managerId} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500">
+                                    <option value="">Pilih Personel</option>
+                                    {users.filter(u => u.role !== UserRole.SUPER_ADMIN).map(u => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
+                                  </select>
+                                </div>
+                                <div className="col-span-1">
+                                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Tanggal Pembelian/Bangun</label>
+                                  <input name="purchaseDate" type="date" defaultValue={editingHouse?.purchaseDate} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+                                </div>
+                                <div className="col-span-1">
+                                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Nilai Aset (IDR)</label>
+                                  <input name="purchasePrice" type="number" defaultValue={editingHouse?.purchasePrice || 0} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+                                </div>
+                              </div>
+                              <button type="submit" className="w-full bg-slate-900 text-white py-4 rounded-sm font-bold text-[10px] uppercase tracking-[0.2em] hover:bg-slate-800 transition-all shadow-xl flex items-center justify-center gap-2">
+                                <Save size={14} /> Simpan Data Kandang
+                              </button>
+                            </form>
+                        </Modal>
+                    </motion.div>
+                )}
+
+                {activeSection === 'PROFILE' && (
+                    <motion.div
+                        initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
+                        key="profile" className="space-y-8"
+                    >
+                        <div className="bg-white p-8 border border-slate-200 shadow-sm">
+                            <div className="flex items-center justify-between mb-8">
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight italic">User Profile Management</h3>
+                                    <p className="text-xs text-slate-500 mt-1 uppercase font-bold italic tracking-tighter opacity-70">Kelola kredensial dan hak akses personil farm.</p>
+                                </div>
+                                <button 
+                                    onClick={() => { setEditingUser(null); setIsUserModalOpen(true); }}
+                                    className="bg-slate-900 text-white p-3 rounded-full hover:bg-slate-800 transition-all shadow-lg"
+                                >
+                                    <Plus size={20} />
+                                </button>
+                            </div>
+
+                            <div className="divide-y divide-slate-100 border border-slate-100">
+                              {users.map(u => (
+                                <div key={u.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-all group">
+                                  <div className="flex items-center space-x-4">
+                                    <div className="w-10 h-10 bg-slate-100 rounded-sm flex items-center justify-center text-slate-400 group-hover:bg-slate-900 group-hover:text-white transition-all">
+                                      <UserIcon size={18} />
+                                    </div>
+                                    <div>
+                                      <p className="text-[11px] font-black uppercase text-slate-900 italic">{u.name}</p>
+                                      <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{u.role} · @{u.username}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center space-x-2">
+                                    <button onClick={() => { setEditingUser(u); setIsUserModalOpen(true); }} className="p-2 text-slate-400 hover:text-slate-900"><Edit2 size={16} /></button>
+                                    {u.role !== UserRole.SUPER_ADMIN && (
+                                      <button onClick={() => deleteUser(u.id)} className="p-2 text-slate-400 hover:text-rose-600"><Trash2 size={16} /></button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                        </div>
+
+                        <Modal isOpen={isUserModalOpen} onClose={() => setIsUserModalOpen(false)} title={editingUser ? `Edit User: ${editingUser.name}` : "Tambah User Baru"}>
+                            <form onSubmit={handleSaveUser} className="space-y-6">
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="col-span-2">
+                                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Nama Lengkap</label>
+                                  <input name="name" required defaultValue={editingUser?.name} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+                                </div>
+                                <div className="col-span-1">
+                                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Username</label>
+                                  <input name="username" required defaultValue={editingUser?.username} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+                                </div>
+                                <div className="col-span-1">
+                                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Password</label>
+                                  <input name="password" required type="text" defaultValue={editingUser?.password} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+                                </div>
+                                <div className="col-span-2">
+                                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Email Address</label>
+                                  <input name="email" required type="email" defaultValue={editingUser?.email} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+                                </div>
+                                <div className="col-span-1">
+                                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Role</label>
+                                  <select name="role" defaultValue={editingUser?.role} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500">
+                                    <option value={UserRole.ADMIN}>ADMIN</option>
+                                    <option value={UserRole.WORKER}>WORKER</option>
+                                    <option value={UserRole.SUPER_ADMIN}>SUPER_ADMIN (OWNER)</option>
+                                  </select>
+                                </div>
+                                <div className="col-span-1">
+                                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Gaji Pokok (IDR)</label>
+                                  <input name="salary" type="number" defaultValue={editingUser?.salary || 0} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+                                </div>
+                              </div>
+                              <button type="submit" className="w-full bg-slate-900 text-white py-4 rounded-sm font-bold text-[10px] uppercase tracking-[0.2em] hover:bg-slate-800 transition-all shadow-xl">
+                                Simpan Profil User
+                              </button>
+                            </form>
+                        </Modal>
+                    </motion.div>
+                )}
+
+                {activeSection === 'SECURITY' && (
+                    <motion.div
+                        initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
+                        key="security" className="space-y-8"
+                    >
+                        <div className="bg-white p-8 border border-slate-200 shadow-sm">
+                            <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight italic mb-8">RBAC Sidebar permissions</h3>
+                            
+                            <div className="flex gap-4 mb-8">
+                              {[UserRole.ADMIN, UserRole.WORKER].map(role => (
+                                <button 
+                                  key={role}
+                                  onClick={() => setSelectedRoleForSecurity(role)}
+                                  className={cn(
+                                    "px-6 py-3 text-[10px] font-bold uppercase tracking-[0.2em] border transition-all",
+                                    selectedRoleForSecurity === role ? "bg-slate-900 text-white border-slate-900 shadow-md" : "bg-white text-slate-400 border-slate-200 hover:border-slate-400"
+                                  )}
+                                >
+                                  {role.replace('_', ' ')} Access
+                                </button>
+                              ))}
+                            </div>
+
+                            <div className="bg-slate-50 border border-slate-100 p-6">
+                              <p className="text-[10px] font-black uppercase text-slate-900 mb-6 italic flex items-center gap-2">
+                                <LayoutIcon size={14} /> Sidebar Navigation Access for {selectedRoleForSecurity}
+                              </p>
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {ALL_SIDEBAR_ITEMS.map(item => {
+                                  const isChecked = sidebarPermissions[selectedRoleForSecurity]?.includes(item.id);
+                                  return (
+                                    <label 
+                                      key={item.id}
+                                      className={cn(
+                                        "flex items-center space-x-3 p-3 border transition-all cursor-pointer",
+                                        isChecked ? "bg-white border-amber-500 ring-1 ring-amber-500/10 shadow-sm" : "bg-slate-100/50 border-slate-200 grayscale opacity-60"
+                                      )}
+                                    >
+                                      <div className={cn(
+                                        "w-5 h-5 rounded-sm border flex items-center justify-center transition-all",
+                                        isChecked ? "bg-amber-500 border-amber-600" : "bg-white border-slate-300"
+                                      )}>
+                                        {isChecked && <CheckCircle2 size={12} className="text-white" />}
+                                        <input 
+                                          type="checkbox" 
+                                          className="hidden" 
+                                          checked={isChecked}
+                                          onChange={() => {
+                                            const current = sidebarPermissions[selectedRoleForSecurity] || [];
+                                            const next = isChecked ? current.filter(id => id !== item.id) : [...current, item.id];
+                                            updatePermissions(selectedRoleForSecurity, next);
+                                          }}
+                                        />
+                                      </div>
+                                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-700">{item.label}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+
+                {activeSection === 'DATA' && (
+                    <motion.div 
+                        initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
+                        key="data" className="space-y-8"
+                    >
+                        <div className="bg-white p-8 border border-slate-200 shadow-sm space-y-8 relative overflow-hidden">
+                            <div className="flex items-center space-x-6">
+                                <div className="p-4 bg-slate-50 border border-slate-100 text-slate-500">
+                                    <RotateCcw size={32} strokeWidth={1.5} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight italic">Registry Integrity & Backup</h3>
+                                    <p className="text-xs text-slate-500 mt-1 uppercase font-bold italic tracking-tighter opacity-70">Archive snapshot of production cycle (24 Months Cycle).</p>
+                                </div>
+                            </div>
+                            
+                            <div className="p-6 bg-slate-50 border border-slate-100 flex items-center justify-between shadow-inner">
+                                <div className="flex items-center space-x-4">
+                                    <Database size={20} className="text-amber-600" />
+                                    <div>
+                                        <p className="text-[10px] font-bold text-slate-900 uppercase tracking-widest">Main Archive Node</p>
+                                        <p className="text-[9px] text-slate-400 font-black italic uppercase tracking-tighter">Last Snapshot: 1 hour ago</p>
+                                    </div>
+                                </div>
+                                <button className="bg-slate-900 text-white px-6 py-3 rounded-sm text-[10px] font-bold uppercase tracking-widest hover:bg-slate-800 shadow-md border border-slate-800 transition-colors">Export SQL/CSV</button>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+
                 {activeSection === 'FLOCKS' && (
                     <motion.div
-                        initial={{ opacity: 0, x: 10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -10 }}
-                        key="flocks"
-                        className="space-y-8"
+                        initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
+                        key="flocks" className="space-y-8"
                     >
                         <div className="bg-white p-8 border border-slate-200 shadow-sm relative">
                             <div className="flex items-center justify-between mb-8">
@@ -157,10 +444,7 @@ export default function Settings() {
                                     <p className="text-xs text-slate-500 mt-1 uppercase font-bold italic tracking-tighter opacity-70">Kelola batch ayam, umur, dan populasi aktif.</p>
                                 </div>
                                 <button 
-                                    onClick={() => {
-                                        setEditingFlock(null);
-                                        setIsFlockModalOpen(true);
-                                    }}
+                                    onClick={() => { setEditingFlock(null); setIsFlockModalOpen(true); }}
                                     className="bg-slate-900 text-white p-3 rounded-full hover:bg-slate-800 transition-all shadow-lg"
                                 >
                                     <Plus size={20} />
@@ -204,33 +488,18 @@ export default function Settings() {
                                                     <p className="text-[10px] font-black text-slate-900 uppercase tracking-tighter italic">{age.weeks} Minggu {age.days} Hari</p>
                                                     <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">Umur Saat Ini</p>
                                                 </div>
-                                                <button 
-                                                    onClick={() => {
-                                                        setEditingFlock(flock);
-                                                        setIsFlockModalOpen(true);
-                                                    }}
-                                                    className="p-2 text-slate-400 hover:text-slate-900 transition-colors"
-                                                >
-                                                    <Edit2 size={16} />
-                                                </button>
-                                                <button 
-                                                    onClick={() => {
-                                                        Swal.fire({
-                                                            title: 'Hapus Batch?',
-                                                            text: 'Seluruh data batch ini akan dihapus permanen.',
-                                                            icon: 'warning',
-                                                            showCancelButton: true,
-                                                            confirmButtonColor: '#e11d48',
-                                                            confirmButtonText: 'Ya, Hapus',
-                                                            cancelButtonText: 'Batal'
-                                                        }).then(result => {
-                                                            if (result.isConfirmed) deleteFlock(flock.id);
-                                                        });
-                                                    }}
-                                                    className="p-2 text-slate-400 hover:text-rose-600 transition-colors"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
+                                                <button onClick={() => { setEditingFlock(flock); setIsFlockModalOpen(true); }} className="p-2 text-slate-400 hover:text-slate-900 transition-colors"><Edit2 size={16} /></button>
+                                                <button onClick={() => {
+                                                    Swal.fire({
+                                                        title: 'Hapus Batch?',
+                                                        text: 'Seluruh data batch ini akan dihapus permanen.',
+                                                        icon: 'warning',
+                                                        showCancelButton: true,
+                                                        confirmButtonColor: '#e11d48',
+                                                        confirmButtonText: 'Ya, Hapus',
+                                                        cancelButtonText: 'Batal'
+                                                    }).then(result => { if (result.isConfirmed) deleteFlock(flock.id); });
+                                                }} className="p-2 text-slate-400 hover:text-rose-600 transition-colors"><Trash2 size={16} /></button>
                                             </div>
                                         </div>
                                     );
@@ -238,11 +507,7 @@ export default function Settings() {
                             </div>
                         </div>
 
-                        <Modal
-                            isOpen={isFlockModalOpen}
-                            onClose={() => setIsFlockModalOpen(false)}
-                            title={editingFlock ? "Edit Batch/Flock" : "Tambah Batch Baru"}
-                        >
+                        <Modal isOpen={isFlockModalOpen} onClose={() => setIsFlockModalOpen(false)} title={editingFlock ? "Edit Batch/Flock" : "Tambah Batch Baru"}>
                             <FlockForm 
                                 houseId={selectedHouseId}
                                 flock={editingFlock}
@@ -256,182 +521,6 @@ export default function Settings() {
                                 }}
                             />
                         </Modal>
-                    </motion.div>
-                )}
-
-                {activeSection === 'HOUSES' && (
-                    <motion.div
-                        initial={{ opacity: 0, x: 10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -10 }}
-                        key="houses"
-                        className="space-y-8"
-                    >
-                        <div className="bg-white p-8 border border-slate-200 shadow-sm relative">
-                            <div className="flex items-center justify-between mb-8">
-                                <div>
-                                    <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight italic">Multi-House Management</h3>
-                                    <p className="text-xs text-slate-500 mt-1 uppercase font-bold italic tracking-tighter opacity-70">Konfigurasi dan pemisahan data antar kandang.</p>
-                                </div>
-                                <button 
-                                    onClick={handleAddHouse}
-                                    className="bg-slate-900 text-white p-3 rounded-full hover:bg-slate-800 transition-all shadow-lg"
-                                >
-                                    <Plus size={20} />
-                                </button>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {houses.map((house) => (
-                                    <div key={house.id} className="p-6 bg-slate-50 border border-slate-100 hover:border-amber-500 transition-all flex items-center justify-between group cursor-pointer">
-                                        <div className="flex items-center space-x-4">
-                                            <div className="w-10 h-10 bg-white border border-slate-200 rounded-sm flex items-center justify-center text-slate-400 group-hover:text-amber-500">
-                                                <Home size={20} />
-                                            </div>
-                                            <div>
-                                                <p className="text-[11px] font-black uppercase text-slate-900 tracking-tighter">{house.name}</p>
-                                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{house.location || 'Section Default'}</p>
-                                            </div>
-                                        </div>
-                                        <ChevronRight size={14} className="text-slate-300 group-hover:text-slate-900" />
-                                    </div>
-                                ))}
-                            </div>
-                            
-                            <div className="mt-8 pt-8 border-t border-slate-100">
-                                <div className="p-4 bg-amber-50 border border-amber-100 flex items-center space-x-3">
-                                    <ShieldCheck size={16} className="text-amber-600" />
-                                    <p className="text-[9px] text-amber-800 font-bold uppercase tracking-widest leading-relaxed">
-                                        Data produksi, stok, dan keuangan dipisahkan secara otomatis berdasarkan Kandang yang aktif dipilih di top bar.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
-
-                {activeSection === 'DATA' && (
-                    <motion.div 
-                        initial={{ opacity: 0, x: 10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -10 }}
-                        key="data"
-                        className="space-y-8"
-                    >
-                        <div className="bg-white p-8 border border-slate-200 shadow-sm space-y-8 relative overflow-hidden">
-                            <div className="flex items-center space-x-6">
-                                <div className="p-4 bg-slate-50 border border-slate-100 text-slate-500">
-                                    <RotateCcw size={32} strokeWidth={1.5} />
-                                </div>
-                                <div>
-                                    <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight italic">Registry Integrity & Backup</h3>
-                                    <p className="text-xs text-slate-500 mt-1 uppercase font-bold italic tracking-tighter opacity-70">Archive snapshot of production cycle (24 Months Cycle).</p>
-                                </div>
-                            </div>
-                            
-                            <div className="p-6 bg-slate-50 border border-slate-100 flex items-center justify-between shadow-inner">
-                                <div className="flex items-center space-x-4">
-                                    <Database size={20} className="text-amber-600" />
-                                    <div>
-                                        <p className="text-[10px] font-bold text-slate-900 uppercase tracking-widest">Main Archive Node</p>
-                                        <p className="text-[9px] text-slate-400 font-black italic uppercase tracking-tighter">Last Snapshot: 1 hour ago</p>
-                                    </div>
-                                </div>
-                                <button 
-                                    onClick={handleExport}
-                                    className="bg-slate-900 text-white px-6 py-3 rounded-sm text-[10px] font-bold uppercase tracking-widest hover:bg-slate-800 shadow-md border border-slate-800 transition-colors"
-                                >
-                                    Export SQL/CSV
-                                </button>
-                            </div>
-
-                            <div className="pt-4 border-t border-slate-100">
-                                <p className="text-[10px] text-slate-400 font-bold leading-relaxed uppercase tracking-widest italic">
-                                    * Eggly provides automated daily cloud redundancy. Manual archiving is recommended at the end of each bird strain cycle.
-                                </p>
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
-
-                {activeSection === 'NOTIF' && (
-                    <motion.div 
-                        initial={{ opacity: 0, x: 10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -10 }}
-                        key="notif"
-                        className="space-y-8"
-                    >
-                        <div className="bg-white p-8 border border-slate-200 shadow-sm space-y-8 relative">
-                            <div className="flex items-center space-x-6">
-                                <div className="p-4 bg-slate-50 border border-slate-100 text-slate-500">
-                                    <MessageSquare size={32} strokeWidth={1.5} />
-                                </div>
-                                <div>
-                                    <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight italic">WhatsApp Integration Node</h3>
-                                    <p className="text-xs text-slate-500 mt-1 uppercase font-bold italic tracking-tighter opacity-70">Configure operational alerts and HDP summary broadcast.</p>
-                                </div>
-                            </div>
-                            
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 hover:border-slate-300 transition-colors">
-                                    <div>
-                                        <p className="text-[10px] font-bold text-slate-900 uppercase tracking-widest">Stock Criticality Alert</p>
-                                        <p className="text-[9px] text-slate-400 uppercase font-black tracking-tighter italic mt-0.5">Broadcast when inventory drops below RE-ORDER point.</p>
-                                    </div>
-                                    <div className="bg-amber-500 w-10 h-5 rounded-sm relative shadow-sm border border-amber-600 cursor-pointer">
-                                        <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-white rounded-sm shadow-sm" />
-                                    </div>
-                                </div>
-                                <div className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 opacity-60">
-                                    <div>
-                                        <p className="text-[10px] font-bold text-slate-900 uppercase tracking-widest">HDP Performance Digest</p>
-                                        <p className="text-[9px] text-slate-400 uppercase font-black tracking-tighter italic mt-0.5">Automated morning production snapshot (09:00 WIB).</p>
-                                    </div>
-                                    <div className="bg-slate-200 w-10 h-5 rounded-sm relative border border-slate-300">
-                                        <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-sm shadow-sm" />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
-
-                {activeSection === 'SECURITY' && (
-                    <motion.div 
-                        initial={{ opacity: 0, x: 10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -10 }}
-                        key="security"
-                        className="space-y-8"
-                    >
-                        <div className="bg-white p-8 border border-slate-200 shadow-sm relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-slate-50 transform rotate-45 translate-x-12 -translate-y-12 border-b border-l border-slate-100"></div>
-                            <div className="flex items-center justify-between mb-8">
-                                <div>
-                                    <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight italic">RBAC Control Panel</h3>
-                                    <p className="text-xs text-slate-500 mt-1 uppercase font-bold italic tracking-tighter opacity-70">Manage user roles and permission inheritance.</p>
-                                </div>
-                                <button className="text-slate-300 hover:text-slate-900 transition-colors"><Users size={20} /></button>
-                            </div>
-                            
-                            <div className="space-y-3">
-                                {[UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.WORKER].map((role) => (
-                                    <div key={role} className="flex items-center justify-between p-4 border border-slate-100 hover:border-slate-300 transition-all cursor-pointer group">
-                                        <div className="flex items-center space-x-4">
-                                            <div className="w-1.5 h-6 bg-slate-900 group-hover:bg-amber-500 transition-colors" />
-                                            <div>
-                                                <p className="text-[10px] font-bold text-slate-900 uppercase tracking-[0.2em]">{role.replace('_', ' ')}</p>
-                                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter italic mt-0.5">
-                                                    {role === UserRole.WORKER ? "Production Input Layer Only" : "Full Financial & Audit Access"}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <ChevronRight size={14} className="text-slate-300 group-hover:text-slate-900 transition-colors" />
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -473,10 +562,7 @@ function FlockForm({ houseId, flock, onSave }: FlockFormProps) {
                 <div className="col-span-2">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Strain / Jenis Ayam</label>
                     <input
-                        type="text"
-                        required
-                        value={strain}
-                        onChange={(e) => setStrain(e.target.value)}
+                        type="text" required value={strain} onChange={(e) => setStrain(e.target.value)}
                         placeholder="Contoh: Isa Brown, Lohmann, Hisex"
                         className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-500"
                     />
@@ -486,10 +572,7 @@ function FlockForm({ houseId, flock, onSave }: FlockFormProps) {
                     <div className="relative">
                         <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                         <input
-                            type="date"
-                            required
-                            value={arrivalDate}
-                            onChange={(e) => setArrivalDate(e.target.value)}
+                            type="date" required value={arrivalDate} onChange={(e) => setArrivalDate(e.target.value)}
                             className="w-full bg-slate-50 border border-slate-200 rounded-sm pl-12 pr-4 py-3 text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-500"
                         />
                     </div>
@@ -497,24 +580,16 @@ function FlockForm({ houseId, flock, onSave }: FlockFormProps) {
                 <div className="col-span-2 sm:col-span-1">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Umur Saat Datang (Mg)</label>
                     <input
-                        type="number"
-                        required
-                        min="0"
-                        value={arrivalAgeWeeks}
-                        onChange={(e) => setArrivalAgeWeeks(Number(e.target.value))}
+                        type="number" required min="0" value={arrivalAgeWeeks} onChange={(e) => setArrivalAgeWeeks(Number(e.target.value))}
                         className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-500"
                     />
                 </div>
                 <div className="col-span-2 sm:col-span-1">
                     <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Populasi Awal (Ekor)</label>
                     <div className="relative">
-                        <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                         <input
-                            type="number"
-                            required
-                            min="1"
-                            value={initialCount}
-                            onChange={(e) => setInitialCount(Number(e.target.value))}
+                            type="number" required min="1" value={initialCount} onChange={(e) => setInitialCount(Number(e.target.value))}
                             className="w-full bg-slate-50 border border-slate-200 rounded-sm pl-12 pr-4 py-3 text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-500"
                         />
                     </div>
@@ -526,24 +601,16 @@ function FlockForm({ houseId, flock, onSave }: FlockFormProps) {
                             isActive ? "bg-amber-500 border-amber-600 shadow-inner" : "bg-white border-slate-200"
                         )}>
                             {isActive && <CheckCircle2 size={14} className="text-white" />}
-                            <input
-                                type="checkbox"
-                                className="hidden"
-                                checked={isActive}
-                                onChange={(e) => setIsActive(e.target.checked)}
-                            />
+                            <input type="checkbox" className="hidden" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
                         </div>
                         <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Batch Aktif</span>
                     </label>
                 </div>
             </div>
-
-            <button
-                type="submit"
-                className="w-full bg-slate-900 text-white py-4 rounded-sm font-bold text-[10px] uppercase tracking-[0.2em] hover:bg-slate-800 transition-all shadow-lg"
-            >
+            <button type="submit" className="w-full bg-slate-900 text-white py-4 rounded-sm font-bold text-[10px] uppercase tracking-[0.2em] hover:bg-slate-800 transition-all shadow-lg">
                 Simpan Konfigurasi Batch
             </button>
         </form>
     );
 }
+

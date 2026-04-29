@@ -6,7 +6,7 @@ interface HouseContextType {
   selectedHouseId: string;
   setSelectedHouseId: (id: string) => void;
   activeHouse: PoultryHouse | undefined;
-  addHouse: (name: string, capacity?: number) => void;
+  addHouse: (name: string, capacity?: number, managerId?: string, purchaseDate?: string, purchasePrice?: number) => void;
   updateHouse: (id: string, updates: Partial<PoultryHouse>) => void;
   deleteHouse: (id: string) => void;
 }
@@ -36,11 +36,14 @@ export const HouseProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const activeHouse = houses.find(h => h.id === selectedHouseId) || houses[0];
 
-  const addHouse = (name: string, capacity = 0) => {
+  const addHouse = (name: string, capacity = 0, managerId?: string, purchaseDate?: string, purchasePrice?: number) => {
     const newHouse: PoultryHouse = {
       id: `h${Date.now()}`,
       name,
       capacity,
+      managerId,
+      purchaseDate,
+      purchasePrice
     };
     setHouses(prev => [...prev, newHouse]);
     setSelectedHouseId(newHouse.id);

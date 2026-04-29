@@ -33,6 +33,9 @@ export interface PoultryHouse {
   location?: string;
   capacity: number;           // jumlah ayam maksimum
   description?: string;
+  managerId?: string;         // NEW: Penanggungjawab
+  purchaseDate?: string;      // NEW: For depreciation calculation
+  purchasePrice?: number;     // NEW: For depreciation calculation
 }
 
 export enum ItemType {
@@ -47,10 +50,12 @@ export enum ItemType {
 export interface User {
   id: string;
   name: string;
+  username: string;             // NEW: Username
   role: UserRole;
   email: string;
   password?: string;            // plain-text for mock auth
   assignedHouses?: string[];    // WORKER only — which houses they can access
+  salary?: number;              // NEW: Penggajian
 }
 
 export interface DailyProduction {
@@ -93,14 +98,28 @@ export interface Sale {
   isFree?: boolean;
 }
 
+export enum AssetCondition {
+  BAIK = 'BAIK',
+  SERVIS = 'SERVIS',
+  RUSAK = 'RUSAK'
+}
+
+export interface MaintenanceRecord {
+  date: string;
+  status: AssetCondition;
+  user: string;
+  notes?: string;
+}
+
 export interface Asset {
   id: string;
   name: string;
+  category: 'ALAT PRODUKSI' | 'KENDARAAN' | 'BANGUNAN' | 'LAINNYA';
   purchaseDate: string;
   purchasePrice: number;
-  expectedLifeMonths: number;
-  currentValue: number;
-  type: 'CAGE' | 'BIRD' | 'EQUIPMENT';
+  expectedLifeYears: number;
+  condition: AssetCondition;
+  maintenanceHistory: MaintenanceRecord[];
 }
 
 export interface FinancialRecord {

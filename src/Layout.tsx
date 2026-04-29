@@ -84,7 +84,7 @@ interface LayoutProps {
 }
 
 export default function Layout({ children, activeTab, setActiveTab }: LayoutProps) {
-  const { user, logout } = useApp();
+  const { user, logout, sidebarPermissions } = useApp();
   const { houses, selectedHouseId, setSelectedHouseId } = useHouse();
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 1024);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -102,8 +102,9 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
 
   const RoleIcon = ROLE_ICON[user.role];
 
-  // Filter menu by role
-  const filteredMenu = MENU_ITEMS.filter(item => item.roles.includes(user.role));
+  // Filter menu by dynamic permissions
+  const rolePermissions = sidebarPermissions[user.role] || [];
+  const filteredMenu = MENU_ITEMS.filter(item => rolePermissions.includes(item.id));
 
   // Filter houses for WORKER — only their assignedHouses
   const visibleHouses = user.role === UserRole.WORKER && user.assignedHouses?.length

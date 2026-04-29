@@ -23,24 +23,6 @@ import { GlobalProvider } from './GlobalContext';
 import { UserRole } from './types';
 import { ShieldOff } from 'lucide-react';
 
-// ─── RBAC Definitions ─────────────────────────────────────────────────────────
-
-const ROUTE_ROLES: Record<string, UserRole[]> = {
-  dashboard:       [UserRole.SUPER_ADMIN, UserRole.ADMIN],
-  production:      [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.WORKER],
-  feedFormulation: [UserRole.SUPER_ADMIN, UserRole.ADMIN],
-  vaccine:         [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.WORKER],
-  sales:           [UserRole.SUPER_ADMIN, UserRole.ADMIN],
-  inventory:       [UserRole.SUPER_ADMIN, UserRole.ADMIN],
-  finance:         [UserRole.SUPER_ADMIN],
-  workers:         [UserRole.SUPER_ADMIN],
-  settings:        [UserRole.SUPER_ADMIN],
-};
-
-function canAccess(tab: string, role: UserRole): boolean {
-  return ROUTE_ROLES[tab]?.includes(role) ?? false;
-}
-
 // ─── Access Denied Panel ──────────────────────────────────────────────────────
 
 function AccessDenied({ tab }: { tab: string }) {
@@ -65,7 +47,7 @@ function AccessDenied({ tab }: { tab: string }) {
 // ─── App Content ──────────────────────────────────────────────────────────────
 
 function AppContent() {
-  const { user, isLoading } = useApp();
+  const { user, isLoading, sidebarPermissions } = useApp();
 
   // WORKER defaults to production tab; others start at dashboard
   const defaultTab = user?.role === UserRole.WORKER ? 'production' : 'dashboard';
@@ -86,8 +68,12 @@ function AppContent() {
 
   if (!user) return <Login />;
 
+  const canAccess = (tab: string) => {
+    return sidebarPermissions[user.role]?.includes(tab) ?? false;
+  };
+
   const renderContent = () => {
-    if (!canAccess(activeTab, user.role)) {
+    if (!canAccess(activeTab)) {
       return <AccessDenied tab={activeTab} />;
     }
     switch (activeTab) {

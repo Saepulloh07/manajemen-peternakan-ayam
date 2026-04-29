@@ -8,6 +8,8 @@ import {
   type FlockAnalytics,
   type FarmSettings,
   DEFAULT_FARM_SETTINGS,
+  type Asset,
+  AssetCondition
 } from './types';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
@@ -126,6 +128,11 @@ interface GlobalContextType {
   farmSettings: FarmSettings;
   saveFarmSettings: (settings: Partial<FarmSettings>) => void;
   addModalAwal: (amount: number, description?: string) => void;
+
+  // Assets
+  assets: Asset[];
+  addAsset: (asset: Omit<Asset, 'id' | 'maintenanceHistory'>) => void;
+  updateAssetStatus: (id: string, status: AssetCondition, user: string, notes?: string) => void;
 }
 
 const GlobalContext = createContext<GlobalContextType | undefined>(undefined);
@@ -163,6 +170,15 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const s = localStorage.getItem('poultry_farm_settings');
     return s ? { ...DEFAULT_FARM_SETTINGS, ...JSON.parse(s) } : DEFAULT_FARM_SETTINGS;
   });
+  const [assets, setAssets] = useState<Asset[]>(() => {
+    const s = localStorage.getItem('poultry_assets');
+    return s ? JSON.parse(s) : [
+      { id: 'ast-1', name: 'Mesin Giling Pakan', category: 'ALAT PRODUKSI', purchaseDate: '2025-01-10', purchasePrice: 12000000, expectedLifeYears: 5, condition: AssetCondition.BAIK, maintenanceHistory: [] },
+      { id: 'ast-2', name: 'Bentor Pengangkut', category: 'KENDARAAN', purchaseDate: '2024-06-15', purchasePrice: 24500000, expectedLifeYears: 4, condition: AssetCondition.SERVIS, maintenanceHistory: [] },
+      { id: 'ast-3', name: 'Timbangan Digital', category: 'ALAT PRODUKSI', purchaseDate: '2026-02-20', purchasePrice: 850000, expectedLifeYears: 2, condition: AssetCondition.BAIK, maintenanceHistory: [] },
+      { id: 'ast-4', name: 'Pompa Air Jetpump', category: 'LAINNYA', purchaseDate: '2025-11-05', purchasePrice: 3200000, expectedLifeYears: 3, condition: AssetCondition.BAIK, maintenanceHistory: [] },
+    ];
+  });
 
   // Persistence
   useEffect(() => { localStorage.setItem('poultry_prod_logs', JSON.stringify(productionLogs)); }, [productionLogs]);
@@ -172,6 +188,7 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => { localStorage.setItem('poultry_mortality', JSON.stringify(mortalityRecords)); }, [mortalityRecords]);
   useEffect(() => { localStorage.setItem('poultry_recipes', JSON.stringify(recipes)); }, [recipes]);
   useEffect(() => { localStorage.setItem('poultry_farm_settings', JSON.stringify(farmSettings)); }, [farmSettings]);
+  useEffect(() => { localStorage.setItem('poultry_assets', JSON.stringify(assets)); }, [assets]);
 
   // ─── Actions ───────────────────────────────────────────────────────────────
 
@@ -334,6 +351,26 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     saveFarmSettings({ initialCapital: farmSettings.initialCapital + amount });
   };
 
+  const addAsset = (assetData: Omit<Asset, 'id' | 'maintenanceHistory'>) => {
+    setAssets(prev => [...prev, { ...assetData, id: `ast-${Date.now()}`, maintenanceHistory: [] }]);
+  };
+
+  const updateAssetStatus = (id: string, status: AssetCondition, user: string, notes?: string) => {
+    setAssets(prev => prev.map(asset => {
+      if (asset.id === id) {
+        return {
+          ...asset,
+          condition: status,
+          maintenanceHistory: [
+            { date: new Date().toISOString(), status, user, notes },
+            ...asset.maintenanceHistory
+          ]
+        };
+      }
+      return asset;
+    }));
+  };
+
   return (
     <GlobalContext.Provider value={{
       productionLogs, salesLogs, transactions, inventory, mortalityRecords, recipes,
@@ -342,6 +379,7 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       addRecipe, updateRecipe, deleteRecipe,
       getHDP, getCumulativeFCR, getFeedIntakePerBird, getFlockAnalytics,
       farmSettings, saveFarmSettings, addModalAwal,
+      assets, addAsset, updateAssetStatus,
     }}>
       {children}
     </GlobalContext.Provider>
