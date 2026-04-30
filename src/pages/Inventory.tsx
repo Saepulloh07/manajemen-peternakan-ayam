@@ -43,8 +43,8 @@ export default function Inventory() {
   const [activeTypeFilter, setActiveTypeFilter] = useState<string>('ALL');
   const [newItem, setNewItem] = useState({ id: '', name: '', quantity: 0, unit: 'kg', price: 0, type: ItemType.RAW_MATERIAL });
 
-  const eggStockItems = inventory.filter(i => i.type === ItemType.EGG_STOCK && (!i.houseId || i.houseId === activeHouse?.id));
-  const nonEggItems = inventory.filter(i => i.type !== ItemType.EGG_STOCK && (!i.houseId || i.houseId === activeHouse?.id));
+  const eggStockItems = inventory.filter(i => i.type === ItemType.EGG_STOCK && i.houseId === activeHouse?.id);
+  const nonEggItems = inventory.filter(i => i.type !== ItemType.EGG_STOCK && i.houseId === activeHouse?.id);
   const filteredItems = activeTypeFilter === 'ALL'
     ? nonEggItems
     : nonEggItems.filter(i => i.type === activeTypeFilter);
@@ -72,7 +72,7 @@ export default function Inventory() {
     }).then((result) => {
       if (result.isConfirmed) {
         // Update Inventory
-        const targetItem = inventory.find(i => i.name.toLowerCase() === newItem.name.toLowerCase() && i.type !== ItemType.EGG_STOCK && (!i.houseId || i.houseId === activeHouse?.id));
+        const targetItem = inventory.find(i => i.name.toLowerCase() === newItem.name.toLowerCase() && i.type !== ItemType.EGG_STOCK && i.houseId === activeHouse?.id);
         if (targetItem) {
             updateInventory(targetItem.id, newItem.quantity);
         } else {
@@ -321,7 +321,7 @@ export default function Inventory() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
-                            {transactions.filter(t => t.type === 'EXPENSE' && (!t.houseId || t.houseId === activeHouse?.id) && !t.description.includes('Gaji') && !t.description.includes('Borongan')).slice(-5).reverse().map((tx) => (
+                            {transactions.filter(t => t.type === 'EXPENSE' && t.houseId === activeHouse?.id && !t.description.includes('Gaji') && !t.description.includes('Borongan')).slice(-5).reverse().map((tx) => (
                                 <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-6 py-4 text-xs font-bold text-slate-800 uppercase tracking-tight">{tx.description}</td>
                                     <td className="px-6 py-4">

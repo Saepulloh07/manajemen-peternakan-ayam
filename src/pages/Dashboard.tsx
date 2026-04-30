@@ -212,13 +212,13 @@ export default function Dashboard() {
     ? (totalMortality / (activeBatch as any).initialCount) * 100 : 0;
 
   // ── Feed Stock Alert ────────────────────────────────────────────────────────
-  const feedItems = inventory.filter(i => (i.type === 'FINISHED_FEED' || i.type === 'RAW_MATERIAL') && (!i.houseId || i.houseId === activeHouse?.id));
+  const feedItems = inventory.filter(i => (i.type === 'FINISHED_FEED' || i.type === 'RAW_MATERIAL') && i.houseId === activeHouse?.id);
   const lowStockItems = feedItems.filter(i => i.quantity <= i.reorderPoint);
 
   // ── Revenue from sales ──────────────────────────────────────────────────────
   const houseSales = salesLogs.filter(s => s.houseId === activeHouse?.id && !s.isFree);
   const totalRevenue = houseSales.reduce((a, b) => a + b.total, 0);
-  const totalExpenses = transactions.filter(t => t.type === 'EXPENSE' && (!t.houseId || t.houseId === activeHouse?.id)).reduce((a, b) => a + b.total, 0);
+  const totalExpenses = transactions.filter(t => t.type === 'EXPENSE' && t.houseId === activeHouse?.id).reduce((a, b) => a + b.total, 0);
   const netPL = totalRevenue - totalExpenses;
 
   // ── Egg breakdown summary (last log) ──────────────────────────────────────

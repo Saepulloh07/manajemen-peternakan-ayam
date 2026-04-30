@@ -58,12 +58,12 @@ export default function Finance() {
     const filteredSalesLogs = salesLogs.filter(s => s.houseId === activeHouse?.id);
 
     // Transaksi dipisah per kandang
-    const houseTransactions = transactions.filter(t => !t.houseId || t.houseId === activeHouse?.id);
+    const houseTransactions = transactions.filter(t => t.houseId === activeHouse?.id);
     const expenseTransactions = houseTransactions.filter(t => t.type === 'EXPENSE');
     const incomeTransactions = houseTransactions.filter(t => t.type === 'INCOME');
     const modalTransactions = houseTransactions.filter(t => t.type === 'MODAL');
 
-    const houseAssets = assets.filter(a => !a.houseId || a.houseId === activeHouse?.id);
+    const houseAssets = assets.filter(a => a.houseId === activeHouse?.id);
 
     // --- Total Calculations ---
     const totalProduction = filteredProdLogs.reduce((acc, curr) => acc + curr.totalKg, 0);

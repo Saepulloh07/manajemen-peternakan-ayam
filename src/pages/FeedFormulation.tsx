@@ -9,9 +9,11 @@ import Swal from 'sweetalert2';
 import { cn } from '../lib/utils';
 import Modal from '../components/Modal';
 import { useGlobalData } from '../GlobalContext';
+import { useHouse } from '../HouseContext';
 import { FeedRecipe, RecipeIngredient, ItemType } from '../types';
 
 export default function FeedFormulation() {
+    const { activeHouse } = useHouse();
     const { inventory, updateInventory, recipes, addRecipe, updateRecipe, deleteRecipe } = useGlobalData();
     const [selectedRecipeId, setSelectedRecipeId] = useState(recipes.length > 0 ? recipes[0].id : '');
     const [targetProductionKg, setTargetProductionKg] = useState<number>(1000);
@@ -24,11 +26,11 @@ export default function FeedFormulation() {
 
     // Finished feed items for output selector
     const finishedFeedItems = useMemo(() =>
-        inventory.filter(i => i.type === ItemType.FINISHED_FEED), [inventory]);
+        inventory.filter(i => i.type === ItemType.FINISHED_FEED && i.houseId === activeHouse?.id), [inventory, activeHouse]);
 
     // Raw materials only for ingredient dropdown
     const rawMaterialItems = useMemo(() =>
-        inventory.filter(i => i.type === ItemType.RAW_MATERIAL), [inventory]);
+        inventory.filter(i => i.type === ItemType.RAW_MATERIAL && i.houseId === activeHouse?.id), [inventory, activeHouse]);
 
     const activeRecipe = useMemo(() =>
         recipes.find(r => r.id === selectedRecipeId) || recipes[0],

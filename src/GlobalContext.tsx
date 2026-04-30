@@ -231,7 +231,7 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     Object.entries(logData.breakdown).forEach(([category, kg]) => {
       if (kg > 0) {
         setInventory(prev => {
-          const existing = prev.find(item => item.type === ItemType.EGG_STOCK && item.eggCategory === category && (!item.houseId || item.houseId === logData.houseId));
+          const existing = prev.find(item => item.type === ItemType.EGG_STOCK && item.eggCategory === category && item.houseId === logData.houseId);
           if (existing) {
             return prev.map(item => item.id === existing.id ? { ...item, quantity: item.quantity + kg, houseId: logData.houseId } : item);
           } else {
@@ -271,7 +271,7 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     if (!saleData.isFree) {
       setInventory(prev => prev.map(item => {
-        if (item.type === ItemType.EGG_STOCK && item.eggCategory === saleData.category && (!item.houseId || item.houseId === saleData.houseId)) {
+        if (item.type === ItemType.EGG_STOCK && item.eggCategory === saleData.category && item.houseId === saleData.houseId) {
           return { ...item, quantity: Math.max(0, item.quantity - saleData.quantity) };
         }
         return item;
