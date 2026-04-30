@@ -6,7 +6,7 @@ interface HouseContextType {
   selectedHouseId: string;
   setSelectedHouseId: (id: string) => void;
   activeHouse: PoultryHouse | undefined;
-  addHouse: (name: string, capacity?: number, managerId?: string, purchaseDate?: string, purchasePrice?: number) => void;
+  addHouse: (name: string, capacity?: number, area?: number, managerId?: string, purchaseDate?: string, purchasePrice?: number) => void;
   updateHouse: (id: string, updates: Partial<PoultryHouse>) => void;
   deleteHouse: (id: string) => void;
 }
@@ -17,8 +17,8 @@ export const HouseProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [houses, setHouses] = useState<PoultryHouse[]>(() => {
     const saved = localStorage.getItem('poultry_houses');
     return saved ? JSON.parse(saved) : [
-      { id: 'h1', name: 'Kandang A', location: 'Section Utara', capacity: 5000 },
-      { id: 'h2', name: 'Kandang B', location: 'Section Selatan', capacity: 4500 }
+      { id: 'h1', name: 'Kandang A', location: 'Section Utara', capacity: 5000, area: 1000 },
+      { id: 'h2', name: 'Kandang B', location: 'Section Selatan', capacity: 4500, area: 900 }
     ];
   });
 
@@ -36,11 +36,12 @@ export const HouseProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const activeHouse = houses.find(h => h.id === selectedHouseId) || houses[0];
 
-  const addHouse = (name: string, capacity = 0, managerId?: string, purchaseDate?: string, purchasePrice?: number) => {
+  const addHouse = (name: string, capacity = 0, area = 0, managerId?: string, purchaseDate?: string, purchasePrice?: number) => {
     const newHouse: PoultryHouse = {
       id: `h${Date.now()}`,
       name,
       capacity,
+      area,
       managerId,
       purchaseDate,
       purchasePrice

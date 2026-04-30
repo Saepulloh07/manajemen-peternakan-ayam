@@ -40,6 +40,9 @@ export default function Production() {
   const { user } = useApp();
 
   const [showHistory, setShowHistory] = useState(false);
+  const [historyPage, setHistoryPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+
   const activeBatch = getActiveFlockByHouse(activeHouse?.id || '');
 
   // Form state
@@ -188,6 +191,14 @@ export default function Production() {
       .then(r => { if (r.isConfirmed) { setEggCount(0); setMortality(0); setFeedConsumed(0); setDiscardedEggs(0); } });
   };
 
+  const houseProdLogs = useMemo(() => productionLogs
+    .filter(l => l.houseId === activeHouse?.id)
+    .sort((a, b) => b.date.localeCompare(a.date)), 
+  [productionLogs, activeHouse]);
+
+  const paginatedLogs = houseProdLogs.slice((historyPage - 1) * ITEMS_PER_PAGE, historyPage * ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(houseProdLogs.length / ITEMS_PER_PAGE) || 1;
+
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-20">
       {/* Header */}
@@ -229,10 +240,7 @@ export default function Production() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {productionLogs
-                    .filter(l => l.houseId === activeHouse?.id)
-                    .sort((a, b) => b.date.localeCompare(a.date))
-                    .map((log, i) => {
+                  {paginatedLogs.map((log, i) => {
                       const hdp = activeBatch && activeBatch.currentCount > 0
                         ? ((log.eggCount / activeBatch.currentCount) * 100).toFixed(1)
                         : '-';
@@ -257,15 +265,19 @@ export default function Production() {
                         </tr>
                       );
                     })}
-                  {productionLogs.filter(l => l.houseId === activeHouse?.id).length === 0 && (
+                  {houseProdLogs.length === 0 && (
                     <tr><td colSpan={10} className="px-6 py-12 text-center text-slate-400 font-bold uppercase tracking-widest">Belum ada riwayat produksi</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
             <div className="px-6 py-3 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
-              <span className="text-[9px] text-slate-400 font-bold uppercase">{productionLogs.filter(l => l.houseId === activeHouse?.id).length} catatan ditemukan</span>
-              <button onClick={() => setShowHistory(false)} className="px-4 py-2 bg-slate-900 text-white text-[9px] font-bold uppercase tracking-widest hover:bg-slate-800 transition-colors">Tutup</button>
+              <span className="text-[9px] text-slate-400 font-bold uppercase">Page {historyPage} of {totalPages} ({houseProdLogs.length} total)</span>
+              <div className="flex gap-2">
+                <button onClick={() => setHistoryPage(p => Math.max(1, p - 1))} disabled={historyPage === 1} className="px-3 py-1 bg-white border border-slate-200 text-slate-600 disabled:opacity-50 text-[10px] font-bold uppercase">Prev</button>
+                <button onClick={() => setHistoryPage(p => Math.min(totalPages, p + 1))} disabled={historyPage >= totalPages} className="px-3 py-1 bg-white border border-slate-200 text-slate-600 disabled:opacity-50 text-[10px] font-bold uppercase">Next</button>
+                <button onClick={() => setShowHistory(false)} className="px-4 py-1 ml-4 bg-slate-900 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-slate-800 transition-colors">Tutup</button>
+              </div>
             </div>
           </div>
         </div>

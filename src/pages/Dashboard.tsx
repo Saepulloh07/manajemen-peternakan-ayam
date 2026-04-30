@@ -88,7 +88,7 @@ export default function Dashboard() {
   const { getActiveFlockByHouse } = useFlock();
   const { productionLogs, salesLogs, inventory, mortalityRecords, transactions, farmSettings } = useGlobalData();
 
-  const [chartPeriod, setChartPeriod] = useState<7 | 14 | 30>(7);
+  const [chartPeriod, setChartPeriod] = useState<'HARIAN' | 'MINGGUAN' | 'BULANAN'>('HARIAN');
 
   const activeBatch = getActiveFlockByHouse(activeHouse?.id || '');
   const currentCount = activeBatch?.currentCount || 0;
@@ -110,21 +110,90 @@ export default function Dashboard() {
 
   // ── Last N Days Chart Data ────────────────────────────────────────────────
   const chartData = useMemo(() => {
-    return Array.from({ length: chartPeriod }, (_, i) => {
-      const date = getWeekAgo(chartPeriod - 1 - i);
-      const log = houseLogs.find(l => l.date === date);
-      const hdp = log && currentCount > 0 ? (log.eggCount / currentCount) * 100 : null;
-      const standard = getStrainStandardHDP(ageWeeks);
-      return {
-        name: new Date(date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }),
-        day: DAY_LABELS[new Date(date).getDay()],
-        produksi: log ? log.totalKg : null,
-        pakan: log ? log.feedConsumed : null,
-        hdp: hdp ? parseFloat(hdp.toFixed(1)) : null,
-        standar: standard,
-        mortalitas: log ? log.mortality : null,
-      };
-    });
+    let result = [];
+    const now = new Date();
+    
+    if (chartPeriod === 'HARIAN') {
+      const days = 14;
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toISOString().split('T')[0];
+        const log = houseLogs.find(l => l.date === dateStr);
+        const hdp = log && currentCount > 0 ? (log.eggCount / currentCount) * 100 : null;
+        result.push({
+          name: d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }),
+          produksi: log ? log.totalKg : 0,
+          pakan: log ? log.feedConsumed : 0,
+          hdp: hdp ? parseFloat(hdp.toFixed(1)) : null,
+          standar: getStrainStandardHDP(ageWeeks),
+          mortalitas: log ? log.mortality : 0,
+        });
+      }
+    } else if (chartPeriod === 'MINGGUAN') {
+      const weeks = 8;
+      for (let i = weeks - 1; i >= 0; i--) {
+        const endD = new Date(now);
+        endD.setDate(endD.getDate() - (i * 7));
+        const startD = new Date(endD);
+        startD.setDate(startD.getDate() - 6);
+        
+        let totalProd = 0, totalPakan = 0, totalMortality = 0, totalEggCount = 0, logCount = 0;
+        
+        houseLogs.forEach(l => {
+          const ld = new Date(l.date);
+          if (ld >= startD && ld <= endD) {
+             totalProd += l.totalKg;
+             totalPakan += l.feedConsumed;
+             totalMortality += l.mortality;
+             totalEggCount += l.eggCount;
+             logCount++;
+          }
+        });
+        
+        const avgHdp = logCount > 0 && currentCount > 0 ? ((totalEggCount / logCount) / currentCount) * 100 : null;
+        
+        result.push({
+          name: `W${weeks - i}`,
+          produksi: totalProd,
+          pakan: totalPakan,
+          hdp: avgHdp ? parseFloat(avgHdp.toFixed(1)) : null,
+          standar: getStrainStandardHDP(Math.max(1, ageWeeks - i)),
+          mortalitas: totalMortality,
+        });
+      }
+    } else if (chartPeriod === 'BULANAN') {
+      const months = 6;
+      for (let i = months - 1; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthStr = d.toISOString().slice(0,7);
+        
+        let totalProd = 0, totalPakan = 0, totalMortality = 0, totalEggCount = 0, logCount = 0;
+        
+        houseLogs.forEach(l => {
+          if (l.date.startsWith(monthStr)) {
+             totalProd += l.totalKg;
+             totalPakan += l.feedConsumed;
+             totalMortality += l.mortality;
+             totalEggCount += l.eggCount;
+             logCount++;
+          }
+        });
+        
+        const avgHdp = logCount > 0 && currentCount > 0 ? ((totalEggCount / logCount) / currentCount) * 100 : null;
+        
+        result.push({
+          name: d.toLocaleDateString('id-ID', { month: 'short', year: '2-digit' }),
+          produksi: totalProd,
+          pakan: totalPakan,
+          hdp: avgHdp ? parseFloat(avgHdp.toFixed(1)) : null,
+          standar: getStrainStandardHDP(Math.max(1, ageWeeks - (i * 4))),
+          mortalitas: totalMortality,
+        });
+      }
+    }
+    
+    return result;
   }, [houseLogs, chartPeriod, currentCount, ageWeeks]);
 
   // ── Key Metrics ─────────────────────────────────────────────────────────────
@@ -143,13 +212,13 @@ export default function Dashboard() {
     ? (totalMortality / (activeBatch as any).initialCount) * 100 : 0;
 
   // ── Feed Stock Alert ────────────────────────────────────────────────────────
-  const feedItems = inventory.filter(i => i.type === 'FINISHED_FEED' || i.type === 'RAW_MATERIAL');
+  const feedItems = inventory.filter(i => (i.type === 'FINISHED_FEED' || i.type === 'RAW_MATERIAL') && (!i.houseId || i.houseId === activeHouse?.id));
   const lowStockItems = feedItems.filter(i => i.quantity <= i.reorderPoint);
 
   // ── Revenue from sales ──────────────────────────────────────────────────────
   const houseSales = salesLogs.filter(s => s.houseId === activeHouse?.id && !s.isFree);
   const totalRevenue = houseSales.reduce((a, b) => a + b.total, 0);
-  const totalExpenses = transactions.filter(t => t.type === 'EXPENSE').reduce((a, b) => a + b.total, 0);
+  const totalExpenses = transactions.filter(t => t.type === 'EXPENSE' && (!t.houseId || t.houseId === activeHouse?.id)).reduce((a, b) => a + b.total, 0);
   const netPL = totalRevenue - totalExpenses;
 
   // ── Egg breakdown summary (last log) ──────────────────────────────────────
@@ -174,11 +243,11 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {[7, 14, 30].map(n => (
+          {['HARIAN', 'MINGGUAN', 'BULANAN'].map(n => (
             <button key={n} onClick={() => setChartPeriod(n as any)}
               className={cn('px-3 py-1.5 text-[9px] font-black uppercase tracking-widest border transition-all',
                 chartPeriod === n ? 'bg-slate-900 text-white border-slate-900' : 'text-slate-400 border-slate-200 hover:border-slate-400')}>
-              {n}H
+              {n}
             </button>
           ))}
         </div>
@@ -231,7 +300,7 @@ export default function Dashboard() {
           <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <div>
               <h3 className="font-bold text-sm text-slate-700">Tren HDP vs Kurva Standar Strain</h3>
-              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{chartPeriod} Hari Terakhir · {activeHouse?.name}</p>
+              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{chartPeriod} · {activeHouse?.name}</p>
             </div>
             <BarChart3 size={18} className="text-slate-300" />
           </div>
@@ -326,7 +395,7 @@ export default function Dashboard() {
         <div className="col-span-12 md:col-span-6 lg:col-span-5 bg-white border border-slate-200 shadow-sm">
           <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
             <h3 className="font-bold text-sm text-slate-700">Konsumsi Pakan vs Produksi Telur</h3>
-            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">kg/hari · {chartPeriod} Hari</p>
+            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{chartPeriod}</p>
           </div>
           <div className="p-4 h-[220px]">
             {houseLogs.length > 0 ? (

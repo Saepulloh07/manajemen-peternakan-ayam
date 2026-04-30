@@ -50,12 +50,21 @@ export default function Settings() {
   // --- Security State ---
   const [selectedRoleForSecurity, setSelectedRoleForSecurity] = useState<UserRole>(UserRole.ADMIN);
 
+  // --- Master Price State ---
+  const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
+  const [editingPrice, setEditingPrice] = useState<{id: string, name: string, price: number} | null>(null);
+
+  // --- Supplier State ---
+  const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState<any | null>(null);
+
   const sections = [
     { id: 'HOUSES', label: 'Manajemen Kandang', icon: Home },
     { id: 'FLOCKS', label: 'Manajemen Batch/Flock', icon: Hash },
     { id: 'PROFILE', label: 'Profil Farm (User)', icon: Smartphone },
     { id: 'SECURITY', label: 'Keamanan & Role', icon: ShieldCheck },
     { id: 'MASTER', label: 'Master Data & Standar', icon: Database },
+    { id: 'SUPPLIER', label: 'Mitra & Supplier', icon: LayoutIcon },
     { id: 'DATA', label: 'Backup & Arsip', icon: RotateCcw },
   ];
 
@@ -91,13 +100,14 @@ export default function Settings() {
     const name = formData.get('name') as string;
     const capacity = Number(formData.get('capacity'));
     const managerId = formData.get('managerId') as string;
+    const area = Number(formData.get('area'));
     const purchaseDate = formData.get('purchaseDate') as string;
     const purchasePrice = Number(formData.get('purchasePrice'));
 
     if (editingHouse) {
-      updateHouse(editingHouse.id, { name, capacity, managerId, purchaseDate, purchasePrice });
+      updateHouse(editingHouse.id, { name, capacity, area, managerId, purchaseDate, purchasePrice });
     } else {
-      addHouse(name, capacity, managerId, purchaseDate, purchasePrice);
+      addHouse(name, capacity, area, managerId, purchaseDate, purchasePrice);
     }
     
     Swal.fire({ title: 'Berhasil!', text: 'Data kandang telah disimpan.', icon: 'success', confirmButtonColor: '#0f172a' });
@@ -124,13 +134,47 @@ export default function Settings() {
     setIsUserModalOpen(false);
   };
 
+  const handleSaveSupplier = (e: React.FormEvent) => {
+    e.preventDefault();
+    const formData = new FormData(e.target as HTMLFormElement);
+    const name = formData.get('name') as string;
+    const whatsappNumber = formData.get('whatsappNumber') as string;
+    const category = formData.get('category') as string;
+    const notes = formData.get('notes') as string;
+
+    const suppliers = farmSettings.suppliers || [];
+    if (editingSupplier) {
+      saveFarmSettings({ suppliers: suppliers.map(s => s.id === editingSupplier.id ? { ...s, name, whatsappNumber, category, notes } : s) });
+    } else {
+      saveFarmSettings({ suppliers: [...suppliers, { id: `sup-${Date.now()}`, name, whatsappNumber, category, notes }] });
+    }
+    Swal.fire({ title: 'Berhasil!', text: 'Data supplier telah disimpan.', icon: 'success', confirmButtonColor: '#0f172a' });
+    setIsSupplierModalOpen(false);
+  };
+
+  const handleSavePrice = (e: React.FormEvent) => {
+    e.preventDefault();
+    const formData = new FormData(e.target as HTMLFormElement);
+    const name = formData.get('name') as string;
+    const price = Number(formData.get('price'));
+
+    const masterPrices = farmSettings.masterPrices || [];
+    if (editingPrice) {
+      saveFarmSettings({ masterPrices: masterPrices.map(p => p.id === editingPrice.id ? { ...p, name, price } : p) });
+    } else {
+      saveFarmSettings({ masterPrices: [...masterPrices, { id: `cat-${Date.now()}`, name, price }] });
+    }
+    Swal.fire({ title: 'Berhasil!', text: 'Harga master telah disimpan.', icon: 'success', confirmButtonColor: '#0f172a' });
+    setIsPriceModalOpen(false);
+  };
+
   const ALL_SIDEBAR_ITEMS = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'production', label: 'Produksi Harian' },
     { id: 'feedFormulation', label: 'Formulasi Pakan' },
     { id: 'vaccine', label: 'Vaksin & Biosekuriti' },
     { id: 'sales', label: 'Penjualan Telur' },
-    { id: 'inventory', label: 'Stok Logistik' },
+    { id: 'inventory', label: 'Stok Gudang' },
     { id: 'finance', label: 'Keuangan & Aset' },
     { id: 'workers', label: 'SDM & Payroll' },
     { id: 'settings', label: 'Konfigurasi' },
@@ -203,7 +247,7 @@ export default function Settings() {
                                             </div>
                                             <div>
                                                 <p className="text-[12px] font-black uppercase text-slate-900 tracking-tighter italic">{house.name}</p>
-                                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">PJ: {manager?.name || 'Belum diatur'}</p>
+                                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">PJ: {manager?.name || 'Belum diatur'} | {house.area || 0} m²</p>
                                             </div>
                                         </div>
                                         <div className="mt-4 pt-4 border-t border-slate-200 flex justify-between items-end">
@@ -234,6 +278,10 @@ export default function Settings() {
                                 <div className="col-span-1">
                                   <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Kapasitas (Ekor)</label>
                                   <input name="capacity" type="number" defaultValue={editingHouse?.capacity || 5000} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+                                </div>
+                                <div className="col-span-1">
+                                  <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Luas Kandang (m²)</label>
+                                  <input name="area" type="number" defaultValue={editingHouse?.area || 0} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
                                 </div>
                                 <div className="col-span-1">
                                   <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Penanggungjawab</label>
@@ -699,7 +747,197 @@ export default function Settings() {
                                     </div>
                                 </div>
                             </div>
+                            
+                            <div className="mt-12 space-y-4 border-t border-slate-100 pt-8">
+                                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-900 flex items-center justify-between">
+                                    <span>Master Harga Produk</span>
+                                    <button 
+                                        onClick={() => { setEditingPrice(null); setIsPriceModalOpen(true); }}
+                                        className="p-1 hover:text-amber-500 transition-colors"
+                                    ><Plus size={14} /></button>
+                                </h4>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {(farmSettings.masterPrices || []).map(p => (
+                                        <div key={p.id} className="bg-slate-50 border border-slate-100 p-4 flex items-center justify-between group">
+                                            <div>
+                                                <p className="text-xs font-bold text-slate-900 uppercase">{p.name}</p>
+                                                <p className="text-[10px] text-amber-500 font-bold italic mt-1">{formatCurrency(p.price)}</p>
+                                            </div>
+                                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                                <button onClick={() => { setEditingPrice(p); setIsPriceModalOpen(true); }} className="text-slate-400 hover:text-amber-500"><Edit2 size={12} /></button>
+                                                <button onClick={() => saveFarmSettings({ masterPrices: farmSettings.masterPrices.filter(x => x.id !== p.id) })} className="text-slate-400 hover:text-rose-500"><Trash2 size={12} /></button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            
+                            {/* NEW: Master Penyusutan */}
+                            <div className="mt-12 space-y-4 border-t border-slate-100 pt-8">
+                                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-900 flex items-center justify-between">
+                                    <span>Master Penyusutan (Depresiasi)</span>
+                                    <button 
+                                        onClick={() => {
+                                            Swal.fire({
+                                                title: 'Simpan Master Penyusutan?',
+                                                text: 'Perubahan ini akan mempengaruhi laporan aset dan nilai buku.',
+                                                icon: 'warning',
+                                                showCancelButton: true,
+                                                confirmButtonColor: '#0f172a'
+                                            }).then((res) => {
+                                                if (res.isConfirmed) {
+                                                    Swal.fire({ title: 'Berhasil!', text: 'Master penyusutan tersimpan.', icon: 'success', confirmButtonColor: '#0f172a' });
+                                                }
+                                            });
+                                        }}
+                                        className="text-[9px] px-3 py-1 bg-amber-50 text-amber-600 font-bold uppercase hover:bg-amber-100 transition-colors"
+                                    >Simpan Perubahan</button>
+                                </h4>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    <div className="bg-slate-50 p-4 border border-slate-100 space-y-4">
+                                        <h5 className="font-bold text-xs uppercase tracking-tight">Kandang & Bangunan</h5>
+                                        <div>
+                                            <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Nilai Beli/Awal (Rp)</label>
+                                            <input type="number" defaultValue={farmSettings.cageValueTotal} onChange={(e) => saveFarmSettings({ cageValueTotal: Number(e.target.value) })} className="w-full bg-white border border-slate-200 rounded-sm px-3 py-2 text-xs font-bold focus:border-amber-500 outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Nilai Sisa/Afkir (Rp)</label>
+                                            <input type="number" defaultValue={farmSettings.cageSalvageValue || 0} onChange={(e) => saveFarmSettings({ cageSalvageValue: Number(e.target.value) })} className="w-full bg-white border border-slate-200 rounded-sm px-3 py-2 text-xs font-bold focus:border-amber-500 outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Umur Ekonomis (Thn)</label>
+                                            <input type="number" defaultValue={farmSettings.cageLifeYears} onChange={(e) => saveFarmSettings({ cageLifeYears: Number(e.target.value) })} className="w-full bg-white border border-slate-200 rounded-sm px-3 py-2 text-xs font-bold focus:border-amber-500 outline-none" />
+                                        </div>
+                                    </div>
+                                    <div className="bg-slate-50 p-4 border border-slate-100 space-y-4">
+                                        <h5 className="font-bold text-xs uppercase tracking-tight">Peralatan</h5>
+                                        <div>
+                                            <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Nilai Beli/Awal (Rp)</label>
+                                            <input type="number" defaultValue={farmSettings.equipmentValueTotal} onChange={(e) => saveFarmSettings({ equipmentValueTotal: Number(e.target.value) })} className="w-full bg-white border border-slate-200 rounded-sm px-3 py-2 text-xs font-bold focus:border-amber-500 outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Nilai Sisa/Afkir (Rp)</label>
+                                            <input type="number" defaultValue={farmSettings.equipmentSalvageValue || 0} onChange={(e) => saveFarmSettings({ equipmentSalvageValue: Number(e.target.value) })} className="w-full bg-white border border-slate-200 rounded-sm px-3 py-2 text-xs font-bold focus:border-amber-500 outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Umur Ekonomis (Thn)</label>
+                                            <input type="number" defaultValue={farmSettings.equipmentLifeYears} onChange={(e) => saveFarmSettings({ equipmentLifeYears: Number(e.target.value) })} className="w-full bg-white border border-slate-200 rounded-sm px-3 py-2 text-xs font-bold focus:border-amber-500 outline-none" />
+                                        </div>
+                                    </div>
+                                    <div className="bg-slate-50 p-4 border border-slate-100 space-y-4">
+                                        <h5 className="font-bold text-xs uppercase tracking-tight">Ayam Pullet (Flock)</h5>
+                                        <div>
+                                            <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Nilai Beli/Awal (Rp)</label>
+                                            <input type="number" defaultValue={farmSettings.layerValueTotal || 100000000} onChange={(e) => saveFarmSettings({ layerValueTotal: Number(e.target.value) })} className="w-full bg-white border border-slate-200 rounded-sm px-3 py-2 text-xs font-bold focus:border-amber-500 outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Nilai Sisa/Afkir (Rp)</label>
+                                            <input type="number" defaultValue={farmSettings.layerSalvageValue || 0} onChange={(e) => saveFarmSettings({ layerSalvageValue: Number(e.target.value) })} className="w-full bg-white border border-slate-200 rounded-sm px-3 py-2 text-xs font-bold focus:border-amber-500 outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Umur Ekonomis (Thn)</label>
+                                            <input type="number" defaultValue={farmSettings.layerLifeYears || 2} onChange={(e) => saveFarmSettings({ layerLifeYears: Number(e.target.value) })} className="w-full bg-white border border-slate-200 rounded-sm px-3 py-2 text-xs font-bold focus:border-amber-500 outline-none" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
+
+                        <Modal isOpen={isPriceModalOpen} onClose={() => setIsPriceModalOpen(false)} title={editingPrice ? "Edit Kategori & Harga" : "Tambah Kategori Harga"}>
+                            <form onSubmit={handleSavePrice} className="space-y-6">
+                                <div>
+                                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Nama Kategori</label>
+                                    <input name="name" required defaultValue={editingPrice?.name} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Harga / Unit (Rp)</label>
+                                    <input name="price" type="number" required defaultValue={editingPrice?.price} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+                                </div>
+                                <button type="submit" className="w-full bg-slate-900 text-white py-4 rounded-sm font-bold text-[10px] uppercase tracking-[0.2em] shadow-xl">
+                                    Simpan Harga
+                                </button>
+                            </form>
+                        </Modal>
+                    </motion.div>
+                )}
+
+                {activeSection === 'SUPPLIER' && (
+                    <motion.div
+                        initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
+                        key="supplier" className="space-y-8"
+                    >
+                        <div className="bg-white p-8 border border-slate-200 shadow-sm relative">
+                            <div className="flex items-center justify-between mb-8">
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight italic">Manajemen Mitra & Supplier</h3>
+                                    <p className="text-xs text-slate-500 mt-1 uppercase font-bold italic tracking-tighter opacity-70">Integrasi WhatsApp untuk pemesanan pakan & gudang.</p>
+                                </div>
+                                <button 
+                                    onClick={() => { setEditingSupplier(null); setIsSupplierModalOpen(true); }}
+                                    className="bg-slate-900 text-white p-3 rounded-full hover:bg-slate-800 transition-all shadow-lg"
+                                >
+                                    <Plus size={20} />
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {(farmSettings.suppliers || []).map((supplier) => (
+                                    <div key={supplier.id} className="p-6 bg-slate-50 border border-slate-100 hover:border-amber-500 transition-all group relative">
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div>
+                                                <p className="text-[12px] font-black uppercase text-slate-900 tracking-tighter italic">{supplier.name}</p>
+                                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{supplier.category}</p>
+                                            </div>
+                                            <div className="flex space-x-2">
+                                                <button onClick={() => { setEditingSupplier(supplier); setIsSupplierModalOpen(true); }} className="p-1.5 bg-white border border-slate-200 text-slate-400 group-hover:text-amber-500"><Edit2 size={12} /></button>
+                                                <button onClick={() => saveFarmSettings({ suppliers: farmSettings.suppliers.filter(s => s.id !== supplier.id) })} className="p-1.5 bg-white border border-slate-200 text-slate-400 hover:text-rose-600"><Trash2 size={12} /></button>
+                                            </div>
+                                        </div>
+                                        <p className="text-[10px] text-slate-500 font-bold mb-4">{supplier.notes}</p>
+                                        <a href={`https://wa.me/${supplier.whatsappNumber.replace(/[^0-9]/g, '')}`} target="_blank" rel="noreferrer" className="inline-flex items-center space-x-2 bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-sm border border-emerald-100 text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-colors">
+                                            <span>Chat WhatsApp</span>
+                                            <ChevronRight size={12} />
+                                        </a>
+                                    </div>
+                                ))}
+                                {(farmSettings.suppliers || []).length === 0 && (
+                                    <div className="col-span-2 text-center py-12 bg-slate-50 border border-dashed border-slate-200">
+                                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Belum ada data supplier</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <Modal isOpen={isSupplierModalOpen} onClose={() => setIsSupplierModalOpen(false)} title={editingSupplier ? `Edit Supplier: ${editingSupplier.name}` : "Tambah Supplier Baru"}>
+                            <form onSubmit={handleSaveSupplier} className="space-y-6">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="col-span-2">
+                                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Nama Perusahaan / Personal</label>
+                                        <input name="name" required defaultValue={editingSupplier?.name} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+                                    </div>
+                                    <div className="col-span-1">
+                                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">No. WhatsApp</label>
+                                        <input name="whatsappNumber" required placeholder="628123456789" defaultValue={editingSupplier?.whatsappNumber} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+                                    </div>
+                                    <div className="col-span-1">
+                                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Kategori Supplier</label>
+                                        <select name="category" defaultValue={editingSupplier?.category || 'FEED'} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500">
+                                            <option value="FEED">Pakan & Bahan Baku</option>
+                                            <option value="MEDICINE">Obat & Vaksin</option>
+                                            <option value="EQUIPMENT">Peralatan</option>
+                                            <option value="OTHER">Lainnya</option>
+                                        </select>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Catatan Tambahan</label>
+                                        <textarea name="notes" defaultValue={editingSupplier?.notes} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500 h-24" />
+                                    </div>
+                                </div>
+                                <button type="submit" className="w-full bg-slate-900 text-white py-4 rounded-sm font-bold text-[10px] uppercase tracking-[0.2em] shadow-xl">
+                                    Simpan Supplier
+                                </button>
+                            </form>
+                        </Modal>
                     </motion.div>
                 )}
             </AnimatePresence>

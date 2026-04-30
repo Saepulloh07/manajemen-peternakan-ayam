@@ -44,6 +44,7 @@ export interface SalesLog {
 
 export interface FinancialTransaction {
   id: string;
+  houseId?: string;
   date: string;
   description: string;
   qty: string;
@@ -111,6 +112,7 @@ interface GlobalContextType {
   saveProduction: (log: Omit<ProductionLog, 'id'>) => void;
   saveSale: (sale: Omit<SalesLog, 'id'>) => void;
   addTransaction: (tx: Omit<FinancialTransaction, 'id'>) => void;
+  updateTransaction: (id: string, updates: Partial<FinancialTransaction>) => void;
   updateInventory: (id: string, delta: number) => void;
   addInventoryItem: (item: Omit<InventoryItem, 'id'>) => void;
   updateInventoryItem: (id: string, updates: Partial<InventoryItem>) => void;
@@ -127,11 +129,12 @@ interface GlobalContextType {
   // Farm Settings
   farmSettings: FarmSettings;
   saveFarmSettings: (settings: Partial<FarmSettings>) => void;
-  addModalAwal: (amount: number, description?: string) => void;
+  addModalAwal: (amount: number, description?: string, houseId?: string) => void;
 
   // Assets
   assets: Asset[];
   addAsset: (asset: Omit<Asset, 'id' | 'maintenanceHistory'>) => void;
+  updateAsset: (id: string, updates: Partial<Asset>) => void;
   updateAssetStatus: (id: string, status: AssetCondition, user: string, notes?: string) => void;
 }
 
@@ -210,6 +213,10 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setTransactions(prev => [...prev, { ...txData, id: `tx-${Date.now()}` }]);
   };
 
+  const updateTransaction = (id: string, updates: Partial<FinancialTransaction>) => {
+    setTransactions(prev => prev.map(tx => tx.id === id ? { ...tx, ...updates } : tx));
+  };
+
   /** FIX #1 + #2 + #4: saveProduction now deducts feed, increments egg stock, and logs mortality */
   const saveProduction = (logData: Omit<ProductionLog, 'id'>) => {
     const newLog = { ...logData, id: `prod-${Date.now()}` };
@@ -220,15 +227,27 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       updateInventory(logData.feedInventoryItemId, -logData.feedConsumed);
     }
 
-    // FIX #2: Auto-increment each egg category stock
+    // FIX #2: Auto-increment each egg category stock (Scoped per house)
     Object.entries(logData.breakdown).forEach(([category, kg]) => {
       if (kg > 0) {
-        setInventory(prev => prev.map(item => {
-          if (item.type === ItemType.EGG_STOCK && item.eggCategory === category) {
-            return { ...item, quantity: item.quantity + kg };
+        setInventory(prev => {
+          const existing = prev.find(item => item.type === ItemType.EGG_STOCK && item.eggCategory === category && (!item.houseId || item.houseId === logData.houseId));
+          if (existing) {
+            return prev.map(item => item.id === existing.id ? { ...item, quantity: item.quantity + kg, houseId: logData.houseId } : item);
+          } else {
+            return [...prev, {
+              id: `inv-egg-${logData.houseId}-${category}-${Date.now()}`,
+              houseId: logData.houseId,
+              name: `Stok Telur ${category}`,
+              type: ItemType.EGG_STOCK,
+              quantity: kg,
+              unit: 'kg',
+              reorderPoint: 0,
+              lastPrice: 0,
+              eggCategory: category as EggCategory
+            }];
           }
-          return item;
-        }));
+        });
       }
     });
 
@@ -251,23 +270,23 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setSalesLogs(prev => [...prev, newSale]);
 
     if (!saleData.isFree) {
-      // Deduct egg stock for the sold category
       setInventory(prev => prev.map(item => {
-        if (item.type === ItemType.EGG_STOCK && item.eggCategory === saleData.category) {
+        if (item.type === ItemType.EGG_STOCK && item.eggCategory === saleData.category && (!item.houseId || item.houseId === saleData.houseId)) {
           return { ...item, quantity: Math.max(0, item.quantity - saleData.quantity) };
         }
         return item;
       }));
 
       addTransaction({
+        houseId: saleData.houseId,
         date: saleData.date,
-        description: `Penjualan Telur: ${saleData.category} (${saleData.customer})`,
-        qty: `${saleData.quantity} Unit`,
+        description: `Penjualan Telur: ${saleData.category} - ${saleData.customer || 'Umum'}`,
+        qty: `${saleData.quantity} kg`,
         price: saleData.price,
         total: saleData.total,
         account: 'Kas Tunai',
         type: 'INCOME',
-        category: saleData.category,
+        category: 'Penjualan'
       });
     }
   };
@@ -338,8 +357,9 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setFarmSettings(prev => ({ ...prev, ...settings }));
   };
 
-  const addModalAwal = (amount: number, description = 'Modal Awal') => {
+  const addModalAwal = (amount: number, description = 'Modal Awal', houseId?: string) => {
     addTransaction({
+      houseId,
       date: new Date().toISOString().split('T')[0],
       description,
       qty: '1',
@@ -353,6 +373,10 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const addAsset = (assetData: Omit<Asset, 'id' | 'maintenanceHistory'>) => {
     setAssets(prev => [...prev, { ...assetData, id: `ast-${Date.now()}`, maintenanceHistory: [] }]);
+  };
+
+  const updateAsset = (id: string, updates: Partial<Asset>) => {
+    setAssets(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
   };
 
   const updateAssetStatus = (id: string, status: AssetCondition, user: string, notes?: string) => {
@@ -374,12 +398,12 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   return (
     <GlobalContext.Provider value={{
       productionLogs, salesLogs, transactions, inventory, mortalityRecords, recipes,
-      saveProduction, saveSale, addTransaction,
+      saveProduction, saveSale, addTransaction, updateTransaction,
       updateInventory, addInventoryItem, updateInventoryItem,
       addRecipe, updateRecipe, deleteRecipe,
       getHDP, getCumulativeFCR, getFeedIntakePerBird, getFlockAnalytics,
       farmSettings, saveFarmSettings, addModalAwal,
-      assets, addAsset, updateAssetStatus,
+      assets, addAsset, updateAsset, updateAssetStatus,
     }}>
       {children}
     </GlobalContext.Provider>

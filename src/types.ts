@@ -32,10 +32,25 @@ export interface PoultryHouse {
   name: string;
   location?: string;
   capacity: number;           // jumlah ayam maksimum
+  area?: number;              // NEW: luas kandang dalam m2
   description?: string;
   managerId?: string;         // NEW: Penanggungjawab
   purchaseDate?: string;      // NEW: For depreciation calculation
   purchasePrice?: number;     // NEW: For depreciation calculation
+}
+
+export interface Supplier {
+  id: string;
+  name: string;
+  whatsappNumber: string;
+  category: string;
+  notes?: string;
+}
+
+export interface MasterPrice {
+  id: string;
+  name: string;
+  price: number;
 }
 
 export enum ItemType {
@@ -113,11 +128,13 @@ export interface MaintenanceRecord {
 
 export interface Asset {
   id: string;
+  houseId: string;
   name: string;
   category: 'ALAT PRODUKSI' | 'KENDARAAN' | 'BANGUNAN' | 'LAINNYA';
   purchaseDate: string;
   purchasePrice: number;
   expectedLifeYears: number;
+  salvageValue?: number; // NEW: Nilai sisa / residu
   condition: AssetCondition;
   maintenanceHistory: MaintenanceRecord[];
 }
@@ -216,14 +233,21 @@ export interface FarmSettings {
   strains: string[];                 // Isa Brown, Lohmann, etc.
   units: string[];                   // kg, liter, ml, etc.
   wasteFreePercentage: number;       // Target/Limit for Waste & Free Goods
+  masterPrices: MasterPrice[];       // NEW: Dynamic master prices
+  suppliers: Supplier[];             // NEW: Suppliers data
   
   // Capital
   initialCapital: number;            // global modal awal farm
   // Depreciation
-  cageValueTotal: number;            // nilai kandang (10 thn)
+  cageValueTotal: number;            // nilai kandang
   cageLifeYears: number;
+  cageSalvageValue: number;          // nilai sisa kandang
   equipmentValueTotal: number;       // nilai peralatan
   equipmentLifeYears: number;
+  equipmentSalvageValue: number;     // nilai sisa peralatan
+  layerValueTotal: number;           // nilai ayam (pullet)
+  layerLifeYears: number;            // umur ekonomis ayam (dalam tahun atau bulan)
+  layerSalvageValue: number;         // nilai sisa/afkir ayam
 }
 
 export const DEFAULT_FARM_SETTINGS: FarmSettings = {
@@ -235,9 +259,26 @@ export const DEFAULT_FARM_SETTINGS: FarmSettings = {
   strains: ['Isa Brown', 'Lohmann', 'Hy-Line', 'Hisex'],
   units: ['kg', 'liter', 'ml', 'papan', 'butir', 'sak'],
   wasteFreePercentage: 3,
+  masterPrices: [
+    { id: 'BM', name: 'BM', price: 28500 },
+    { id: 'KRC', name: 'KRC', price: 27000 },
+    { id: 'KRC_RETAK', name: 'KRC Retak', price: 25000 },
+    { id: 'KS', name: 'KS', price: 25000 },
+    { id: 'KS_RETAK', name: 'KS Retak', price: 22000 },
+    { id: 'PELOR', name: 'PELOR', price: 20000 },
+    { id: 'RETAK', name: 'RETAK', price: 15000 },
+    { id: 'PECAH', name: 'PECAH', price: 5000 },
+    { id: 'NON_EGG', name: 'Limbah/Karung', price: 5000 }
+  ],
+  suppliers: [],
   initialCapital: 0,
   cageValueTotal: 500000000,
   cageLifeYears: 10,
+  cageSalvageValue: 50000000,
   equipmentValueTotal: 50000000,
   equipmentLifeYears: 5,
+  equipmentSalvageValue: 5000000,
+  layerValueTotal: 100000000,
+  layerLifeYears: 2,
+  layerSalvageValue: 20000000,
 };

@@ -23,17 +23,7 @@ import { formatCurrency, getEggCategoryRange, cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import Swal from 'sweetalert2';
 
-const initialPrices = {
-  [EggCategory.BM]: 28500,
-  [EggCategory.KRC]: 27000,
-  [EggCategory.KRC_RETAK]: 25000,
-  [EggCategory.KS]: 25000,
-  [EggCategory.KS_RETAK]: 22000,
-  [EggCategory.PELOR]: 20000,
-  [EggCategory.RETAK]: 15000,
-  [EggCategory.PECAH]: 5000,
-  'NON_EGG': 5000
-};
+// Master prices are now loaded from global context.
 
 import { useHouse } from '../HouseContext';
 import { useGlobalData } from '../GlobalContext';
@@ -47,9 +37,9 @@ export default function Sales() {
   const [customerName, setCustomerName] = useState('');
   const [buyerType, setBuyerType] = useState('REGULAR');
 
-  const [prices, setPrices] = useState(initialPrices);
-  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
-  const [tempPrices, setTempPrices] = useState(initialPrices);
+  // Load master prices from FarmSettings
+  const masterPrices = farmSettings.masterPrices || [];
+  const currentPrice = masterPrices.find(p => p.id === activeCategory)?.price || 0;
 
   // ── Egg Stock Lookup ─────────────────────────────────────────────────────────
   // Find the EGG_STOCK inventory item for the currently selected category
@@ -59,7 +49,7 @@ export default function Sales() {
   const availableStock = eggStockItem ? eggStockItem.quantity : null; // null = no EGG_STOCK tracking (e.g. NON_EGG)
   const isOverStock = availableStock !== null && quantity > availableStock && !isFree;
 
-  const totalPrice = isFree ? 0 : quantity * (prices[activeCategory as keyof typeof prices] || 0);
+  const totalPrice = isFree ? 0 : quantity * currentPrice;
 
   const handleCompleteTransaction = () => {
     if (quantity <= 0) {
@@ -101,7 +91,7 @@ export default function Sales() {
             date: new Date().toISOString().split('T')[0],
             category: activeCategory,
             quantity,
-            price: prices[activeCategory as keyof typeof prices] || 0,
+            price: currentPrice,
             total: totalPrice,
             isFree,
             customer: customerName.trim() || 'Umum'
@@ -127,18 +117,6 @@ export default function Sales() {
           <h1 className="text-xl md:text-2xl font-black text-slate-900 uppercase tracking-tighter italic">Penjualan <span className="text-amber-500">{activeHouse?.name}</span></h1>
           <p className="text-slate-500 text-[10px] md:text-sm mt-1 uppercase font-bold tracking-widest opacity-70">Manajemen transaksi telur & harga master.</p>
         </div>
-        <div className="flex items-center space-x-3">
-          <button 
-            onClick={() => {
-              setTempPrices(prices);
-              setIsUpdateModalOpen(true);
-            }}
-            className="flex items-center space-x-2 bg-white border border-slate-200 px-4 py-2 shadow-sm text-xs font-bold uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-colors"
-          >
-            <Tag size={16} />
-            <span>Update Harga Master</span>
-          </button>
-        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -154,20 +132,20 @@ export default function Sales() {
                 <div>
                   <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-3">Pilih Kategori Produk</label>
                   <div className="grid grid-cols-2 gap-3">
-                    {Object.values(EggCategory).map((cat) => (
+                    {masterPrices.filter(p => p.id !== 'NON_EGG').map((p) => (
                       <button 
-                        key={cat}
-                        onClick={() => setActiveCategory(cat)}
+                        key={p.id}
+                        onClick={() => setActiveCategory(p.id)}
                         className={cn(
                           "p-4 rounded-sm border text-left transition-all",
-                          activeCategory === cat 
+                          activeCategory === p.id 
                             ? "bg-slate-900 border-slate-900 text-white shadow-md shadow-slate-200" 
                             : "bg-slate-50 border-slate-100 text-slate-600 hover:bg-slate-100"
                         )}
                       >
-                        <div className="font-bold text-xs uppercase tracking-tight">{cat}</div>
-                        <div className={cn("text-[9px] uppercase font-bold opacity-60 italic", activeCategory === cat ? "text-amber-500" : "text-slate-400")}>
-                          {getEggCategoryRange(cat)}
+                        <div className="font-bold text-xs uppercase tracking-tight">{p.name}</div>
+                        <div className={cn("text-[9px] uppercase font-bold opacity-60 italic", activeCategory === p.id ? "text-amber-500" : "text-slate-400")}>
+                          {getEggCategoryRange(p.id as EggCategory)}
                         </div>
                       </button>
                     ))}
@@ -266,7 +244,7 @@ export default function Sales() {
                     </div>
                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center">
                        <span className="mr-2">Rate /unit:</span>
-                       <span className="text-amber-500 italic">{formatCurrency(prices[activeCategory as keyof typeof prices] || 0)}</span>
+                       <span className="text-amber-500 italic">{formatCurrency(currentPrice)}</span>
                     </p>
                 </div>
 
@@ -367,79 +345,17 @@ export default function Sales() {
                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
                 </div>
                 <div className="space-y-3">
-                    {Object.entries(prices).map(([cat, price]) => (
-                        <div key={cat} className="flex justify-between items-center p-3 border border-slate-100 bg-slate-50/50 hover:bg-white transition-colors">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{cat}</span>
-                            <span className="text-xs font-black italic text-slate-800">{formatCurrency(price as number)}</span>
+                    {masterPrices.map((p) => (
+                        <div key={p.id} className="flex justify-between items-center p-3 border border-slate-100 bg-slate-50/50 hover:bg-white transition-colors">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{p.name}</span>
+                            <span className="text-xs font-black italic text-slate-800">{formatCurrency(p.price)}</span>
                         </div>
                     ))}
                 </div>
-                <p className="text-[9px] text-slate-400 mt-6 font-medium italic">* Terakhir diupdate: 1 jam yang lalu</p>
+                <p className="text-[9px] text-slate-400 mt-6 font-medium italic">* Terakhir diupdate: Konfigurasi Master</p>
             </div>
         </div>
       </div>
-      <AnimatePresence>
-        {isUpdateModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden relative"
-            >
-              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                <h3 className="font-bold text-sm uppercase tracking-widest text-slate-800 flex items-center">
-                  <Tag className="mr-2 text-amber-500" size={16} />
-                  Update Harga Master
-                </h3>
-                <button onClick={() => setIsUpdateModalOpen(false)} className="text-slate-400 hover:text-rose-500 transition-colors">
-                  <X size={20} />
-                </button>
-              </div>
-              <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-                {Object.entries(tempPrices).map(([cat, price]) => (
-                  <div key={cat}>
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-2">{cat}</label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Rp</span>
-                      <input 
-                        type="number"
-                        value={price}
-                        onChange={(e) => setTempPrices(prev => ({ ...prev, [cat]: Number(e.target.value) }))}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-sm pl-10 pr-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500 transition-all shadow-inner"
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end space-x-3">
-                <button 
-                  onClick={() => setIsUpdateModalOpen(false)}
-                  className="px-4 py-2 text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-slate-800 transition-colors"
-                >
-                  Batal
-                </button>
-                <button 
-                  onClick={() => {
-                    setPrices(tempPrices);
-                    setIsUpdateModalOpen(false);
-                    Swal.fire({
-                      title: 'Berhasil',
-                      text: 'Harga Master berhasil diperbarui!',
-                      icon: 'success',
-                      confirmButtonColor: '#0f172a'
-                    });
-                  }}
-                  className="bg-slate-900 text-white px-6 py-2 rounded-sm text-xs font-bold uppercase tracking-widest flex items-center space-x-2 hover:bg-slate-800 transition-colors shadow-md"
-                >
-                  <Save size={14} className="text-amber-500" />
-                  <span>Simpan</span>
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

@@ -11,7 +11,8 @@ import {
   Save,
   Shield,
   User as UserIcon,
-  Wrench
+  Wrench,
+  Trash2
 } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import { motion } from 'motion/react';
@@ -28,11 +29,7 @@ export default function Workers() {
   const [isWorkerModalOpen, setIsWorkerModalOpen] = useState(false);
   const [isSalaryModalOpen, setIsSalaryModalOpen] = useState(false);
   const [selectedWorker, setSelectedWorker] = useState<User | null>(null);
-  const [borongan, setBorongan] = useState({
-    pupuk: 0,
-    karung: 0,
-    lainnya: 0
-  });
+  const [salaryItems, setSalaryItems] = useState<{ id: string, label: string, amount: number, type: 'ADDITION' | 'DEDUCTION' }[]>([]);
 
   const handleAddWorker = (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,13 +82,14 @@ export default function Workers() {
     if (!selectedWorker) return;
     
     const baseSalary = selectedWorker.salary || 0;
-    const items = [
-      { label: 'Penjualan Pupuk', amount: borongan.pupuk },
-      { label: 'Penjualan Karung', amount: borongan.karung },
-      { label: 'Lain-lain / Bonus', amount: borongan.lainnya }
-    ];
+    const mappedItems = salaryItems.map(item => ({
+      label: item.type === 'DEDUCTION' ? `Potongan: ${item.label}` : item.label,
+      amount: item.type === 'DEDUCTION' ? -item.amount : item.amount
+    }));
     
-    const total = baseSalary + borongan.pupuk + borongan.karung + borongan.lainnya;
+    const additions = salaryItems.filter(i => i.type === 'ADDITION').reduce((acc, curr) => acc + curr.amount, 0);
+    const deductions = salaryItems.filter(i => i.type === 'DEDUCTION').reduce((acc, curr) => acc + curr.amount, 0);
+    const total = baseSalary + additions - deductions;
 
     // Record to financial report
     addTransaction({
@@ -109,7 +107,7 @@ export default function Workers() {
       workerName: selectedWorker.name,
       role: selectedWorker.role,
       baseSalary: baseSalary,
-      boronganItems: items.filter(i => i.amount > 0),
+      boronganItems: mappedItems.filter(i => i.amount !== 0),
       totalSalary: total,
       date: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
     });
@@ -161,7 +159,11 @@ export default function Workers() {
                           onClick={() => {
                             if (currentUser?.role === UserRole.SUPER_ADMIN) {
                               setSelectedWorker(worker);
-                              setBorongan({ pupuk: 0, karung: 0, lainnya: 0 }); // Reset for new selection
+                              setSalaryItems([
+                                { id: 'default-1', label: 'Penjualan Pupuk', amount: 0, type: 'ADDITION' },
+                                { id: 'default-2', label: 'Penjualan Karung', amount: 0, type: 'ADDITION' },
+                                { id: 'default-3', label: 'Lain-lain / Bonus', amount: 0, type: 'ADDITION' }
+                              ]);
                               setIsSalaryModalOpen(true);
                             }
                           }}
@@ -277,35 +279,50 @@ export default function Workers() {
             </form>
 
             <div className="space-y-4">
-                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-900 italic border-b border-slate-100 pb-2">Uraian Gaji Borongan (Tambahan)</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-slate-50 p-4 border border-slate-100">
-                        <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Penjualan Pupuk</label>
-                        <input 
-                            type="number" 
-                            value={borongan.pupuk} 
-                            onChange={(e) => setBorongan(prev => ({ ...prev, pupuk: Number(e.target.value) }))}
-                            className="w-full bg-white border border-slate-200 rounded-sm px-3 py-2 text-sm font-bold focus:outline-none focus:border-amber-500" 
-                        />
-                    </div>
-                    <div className="bg-slate-50 p-4 border border-slate-100">
-                        <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Penjualan Karung</label>
-                        <input 
-                            type="number" 
-                            value={borongan.karung} 
-                            onChange={(e) => setBorongan(prev => ({ ...prev, karung: Number(e.target.value) }))}
-                            className="w-full bg-white border border-slate-200 rounded-sm px-3 py-2 text-sm font-bold focus:outline-none focus:border-amber-500" 
-                        />
-                    </div>
-                    <div className="col-span-full bg-slate-50 p-4 border border-slate-100">
-                        <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 block mb-1">Lain-lain / Bonus</label>
-                        <input 
-                            type="number" 
-                            value={borongan.lainnya} 
-                            onChange={(e) => setBorongan(prev => ({ ...prev, lainnya: Number(e.target.value) }))}
-                            className="w-full bg-white border border-slate-200 rounded-sm px-3 py-2 text-sm font-bold focus:outline-none focus:border-amber-500" 
-                        />
-                    </div>
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-900 italic">Uraian Tambahan & Potongan Gaji</h4>
+                    <button 
+                        type="button"
+                        onClick={() => setSalaryItems(prev => [...prev, { id: `item-${Date.now()}`, label: 'Uraian Baru', amount: 0, type: 'ADDITION' }])}
+                        className="text-[9px] px-2 py-1 bg-slate-100 hover:bg-slate-200 font-bold uppercase"
+                    >+ Tambah Uraian</button>
+                </div>
+                
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                    {salaryItems.map((item, index) => (
+                        <div key={item.id} className="flex items-center gap-2 bg-slate-50 p-2 border border-slate-100">
+                            <select 
+                                value={item.type} 
+                                onChange={(e) => setSalaryItems(prev => prev.map(i => i.id === item.id ? { ...i, type: e.target.value as 'ADDITION' | 'DEDUCTION' } : i))}
+                                className="w-28 bg-white border border-slate-200 px-2 py-2 text-xs font-bold focus:outline-none"
+                            >
+                                <option value="ADDITION">Penambah (+)</option>
+                                <option value="DEDUCTION">Potongan (-)</option>
+                            </select>
+                            <input 
+                                type="text" 
+                                value={item.label}
+                                onChange={(e) => setSalaryItems(prev => prev.map(i => i.id === item.id ? { ...i, label: e.target.value } : i))}
+                                placeholder="Keterangan..."
+                                className="flex-1 bg-white border border-slate-200 px-3 py-2 text-xs font-bold focus:outline-none focus:border-amber-500" 
+                            />
+                            <input 
+                                type="number" 
+                                value={item.amount === 0 ? '' : item.amount}
+                                onChange={(e) => setSalaryItems(prev => prev.map(i => i.id === item.id ? { ...i, amount: Number(e.target.value) } : i))}
+                                placeholder="Nominal Rp"
+                                className="w-32 bg-white border border-slate-200 px-3 py-2 text-xs font-bold focus:outline-none focus:border-amber-500" 
+                            />
+                            <button 
+                                type="button"
+                                onClick={() => setSalaryItems(prev => prev.filter(i => i.id !== item.id))}
+                                className="p-2 text-slate-300 hover:text-rose-500 transition-colors"
+                            ><Trash2 size={14} /></button>
+                        </div>
+                    ))}
+                    {salaryItems.length === 0 && (
+                        <p className="text-center text-xs text-slate-400 font-bold italic py-4">Belum ada rincian tambahan/potongan.</p>
+                    )}
                 </div>
             </div>
 
@@ -314,7 +331,7 @@ export default function Workers() {
                     <div>
                         <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-slate-500">Total Take Home Pay</p>
                         <p className="text-2xl font-black italic tracking-tighter text-amber-500">
-                            {formatCurrency((selectedWorker?.salary || 0) + borongan.pupuk + borongan.karung + borongan.lainnya)}
+                            {formatCurrency((selectedWorker?.salary || 0) + salaryItems.filter(i => i.type === 'ADDITION').reduce((a, c) => a + c.amount, 0) - salaryItems.filter(i => i.type === 'DEDUCTION').reduce((a, c) => a + c.amount, 0))}
                         </p>
                     </div>
                     <DollarSign size={24} className="text-slate-700" />

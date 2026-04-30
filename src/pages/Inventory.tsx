@@ -43,8 +43,8 @@ export default function Inventory() {
   const [activeTypeFilter, setActiveTypeFilter] = useState<string>('ALL');
   const [newItem, setNewItem] = useState({ id: '', name: '', quantity: 0, unit: 'kg', price: 0, type: ItemType.RAW_MATERIAL });
 
-  const eggStockItems = inventory.filter(i => i.type === ItemType.EGG_STOCK);
-  const nonEggItems = inventory.filter(i => i.type !== ItemType.EGG_STOCK);
+  const eggStockItems = inventory.filter(i => i.type === ItemType.EGG_STOCK && (!i.houseId || i.houseId === activeHouse?.id));
+  const nonEggItems = inventory.filter(i => i.type !== ItemType.EGG_STOCK && (!i.houseId || i.houseId === activeHouse?.id));
   const filteredItems = activeTypeFilter === 'ALL'
     ? nonEggItems
     : nonEggItems.filter(i => i.type === activeTypeFilter);
@@ -72,11 +72,12 @@ export default function Inventory() {
     }).then((result) => {
       if (result.isConfirmed) {
         // Update Inventory
-        const targetItem = inventory.find(i => i.name.toLowerCase() === newItem.name.toLowerCase() && i.type !== ItemType.EGG_STOCK);
+        const targetItem = inventory.find(i => i.name.toLowerCase() === newItem.name.toLowerCase() && i.type !== ItemType.EGG_STOCK && (!i.houseId || i.houseId === activeHouse?.id));
         if (targetItem) {
             updateInventory(targetItem.id, newItem.quantity);
         } else {
             addInventoryItem({
+                houseId: activeHouse?.id,
                 name: newItem.name,
                 quantity: newItem.quantity,
                 type: newItem.type,
@@ -89,6 +90,7 @@ export default function Inventory() {
         // Add Financial Transaction
         if (newItem.price > 0) {
             addTransaction({
+                houseId: activeHouse?.id,
                 date: new Date().toISOString().split('T')[0],
                 description: `Pembelian Stok: ${newItem.name}`,
                 qty: `${newItem.quantity} ${newItem.unit}`,
@@ -114,7 +116,7 @@ export default function Inventory() {
     <div className="space-y-8 pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Stok Pakan & Logistik</h1>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Stok Pakan & Gudang</h1>
           <p className="text-slate-500 text-sm mt-1">Monitor stok porsi harian dan jadwal pengiriman luar kota.</p>
         </div>
         <div className="flex items-center space-x-3">
@@ -131,7 +133,7 @@ export default function Inventory() {
       <Modal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
-        title="Input Stok Logistik"
+        title="Input Stok Gudang"
       >
         <form onSubmit={handleAddStock} className="space-y-6">
           <div>
@@ -319,7 +321,7 @@ export default function Inventory() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
-                            {transactions.filter(t => t.type === 'EXPENSE' && !t.description.includes('Gaji') && !t.description.includes('Borongan')).slice(-5).reverse().map((tx) => (
+                            {transactions.filter(t => t.type === 'EXPENSE' && (!t.houseId || t.houseId === activeHouse?.id) && !t.description.includes('Gaji') && !t.description.includes('Borongan')).slice(-5).reverse().map((tx) => (
                                 <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-6 py-4 text-xs font-bold text-slate-800 uppercase tracking-tight">{tx.description}</td>
                                     <td className="px-6 py-4">

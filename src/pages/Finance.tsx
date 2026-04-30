@@ -18,10 +18,13 @@ import {
     Save,
     BookOpen,
     Receipt,
-    ShoppingCart
+    ShoppingCart,
+    Edit2,
+    ChevronLeft,
+    ChevronRight
 } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import Modal from '../components/Modal';
 import Swal from 'sweetalert2';
 import ExcelJS from 'exceljs';
@@ -35,22 +38,32 @@ import { EggCategory } from '../types';
 export default function Finance() {
     const { activeHouse } = useHouse();
     const { getActiveFlockByHouse } = useFlock();
-    const { productionLogs, salesLogs, transactions, addModalAwal, assets, updateAssetStatus } = useGlobalData();
+    const { productionLogs, salesLogs, transactions, addModalAwal, updateTransaction, assets, updateAssetStatus, addAsset, updateAsset, farmSettings, addTransaction } = useGlobalData();
 
     const [activeTab, setActiveTab] = useState<'BUKU_TELUR' | 'BUKU_TRANSAKSI' | 'ASET'>('BUKU_TELUR');
     const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
+    const [editingAsset, setEditingAsset] = useState<any | null>(null);
     const [isModalAwalOpen, setIsModalAwalOpen] = useState(false);
+    const [editingModal, setEditingModal] = useState<any | null>(null);
     const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
     const [isMaintenanceModalOpen, setIsMaintenanceModalOpen] = useState(false);
+
+    // Pagination State
+    const [prodPage, setProdPage] = useState(1);
+    const [txPage, setTxPage] = useState(1);
+    const ITEMS_PER_PAGE = 10;
 
     // --- Filtering Data for Active House ---
     const filteredProdLogs = productionLogs.filter(p => p.houseId === activeHouse?.id);
     const filteredSalesLogs = salesLogs.filter(s => s.houseId === activeHouse?.id);
 
-    // Transaksi biasanya global, tapi jika ingin dipisah per kandang bisa difilter deskripsinya
-    const expenseTransactions = transactions.filter(t => t.type === 'EXPENSE');
-    const incomeTransactions = transactions.filter(t => t.type === 'INCOME');
-    const modalTransactions = transactions.filter(t => t.type === 'MODAL');
+    // Transaksi dipisah per kandang
+    const houseTransactions = transactions.filter(t => !t.houseId || t.houseId === activeHouse?.id);
+    const expenseTransactions = houseTransactions.filter(t => t.type === 'EXPENSE');
+    const incomeTransactions = houseTransactions.filter(t => t.type === 'INCOME');
+    const modalTransactions = houseTransactions.filter(t => t.type === 'MODAL');
+
+    const houseAssets = assets.filter(a => !a.houseId || a.houseId === activeHouse?.id);
 
     // --- Total Calculations ---
     const totalProduction = filteredProdLogs.reduce((acc, curr) => acc + curr.totalKg, 0);
@@ -60,7 +73,7 @@ export default function Finance() {
     const totalModalAwal = modalTransactions.reduce((acc, curr) => acc + curr.total, 0);
 
     // Accounting Logic
-    const totalAllRevenue = totalSalesTelur + totalIncome;
+    const totalAllRevenue = totalIncome; // totalIncome includes sales (auto-added to transactions)
     const netProfit = totalAllRevenue - totalExpenses;
     const currentCapital = totalModalAwal + netProfit;
 
@@ -101,8 +114,13 @@ export default function Finance() {
         const purchaseDate = new Date(asset.purchaseDate);
         const today = new Date();
         const diffMonths = (today.getFullYear() - purchaseDate.getFullYear()) * 12 + (today.getMonth() - purchaseDate.getMonth());
-        const totalDepreciation = (asset.purchasePrice / (asset.expectedLifeYears * 12)) * Math.max(0, diffMonths);
-        return Math.min(asset.purchasePrice, totalDepreciation);
+        
+        const salvageValue = asset.salvageValue || 0;
+        const depreciableAmount = asset.purchasePrice - salvageValue;
+        
+        // Garis Lurus: (Harga Beli - Nilai Sisa) / Umur Ekonomis
+        const totalDepreciation = (depreciableAmount / (asset.expectedLifeYears * 12)) * Math.max(0, diffMonths);
+        return Math.min(depreciableAmount, totalDepreciation);
     };
 
     const handleUpdateStatus = (e: React.FormEvent) => {
@@ -120,19 +138,53 @@ export default function Finance() {
 
     const handleSaveAsset = (e: React.FormEvent) => {
         e.preventDefault();
-        Swal.fire({
-            title: 'Daftarkan Aset?',
-            text: 'Aset baru akan ditambahkan ke inventaris.',
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonColor: '#0f172a',
-            confirmButtonText: 'Ya, Daftar',
-        }).then((result) => {
-            if (result.isConfirmed) {
-                Swal.fire({ title: 'Berhasil!', text: 'Aset telah didaftarkan.', icon: 'success', confirmButtonColor: '#0f172a' });
-                setIsAssetModalOpen(false);
-            }
-        });
+        const formData = new FormData(e.target as HTMLFormElement);
+        
+        const name = formData.get('name') as string;
+        const category = formData.get('category') as string;
+        const purchasePrice = Number(formData.get('purchasePrice'));
+        const salvageValue = Number(formData.get('salvageValue') || 0);
+        const purchaseDate = formData.get('purchaseDate') as string;
+        const expectedLifeYears = Number(formData.get('expectedLifeYears'));
+
+        if (editingAsset) {
+            updateAsset(editingAsset.id, {
+                name,
+                category,
+                purchasePrice,
+                salvageValue,
+                purchaseDate,
+                expectedLifeYears,
+            });
+            Swal.fire({ title: 'Berhasil!', text: 'Aset telah diperbarui.', icon: 'success', confirmButtonColor: '#0f172a' });
+        } else {
+            addAsset({
+                houseId: activeHouse?.id || '',
+                name,
+                category,
+                purchasePrice,
+                salvageValue,
+                purchaseDate,
+                expectedLifeYears,
+                condition: 'BAIK'
+            });
+            // Masukkan ke transaksi pengeluaran (pembelian aset)
+            addTransaction({
+                houseId: activeHouse?.id,
+                date: purchaseDate,
+                description: `Pembelian Aset: ${name} (${category})`,
+                qty: '1 Unit',
+                price: purchasePrice,
+                total: purchasePrice,
+                account: 'Kas Tunai',
+                type: 'EXPENSE',
+                category: 'Aset'
+            });
+
+            Swal.fire({ title: 'Berhasil!', text: 'Aset telah didaftarkan dan tercatat di Buku Kas.', icon: 'success', confirmButtonColor: '#0f172a' });
+        }
+
+        setIsAssetModalOpen(false);
     };
 
     const handleExportExcel = async () => {
@@ -205,28 +257,45 @@ export default function Finance() {
             sheet1.getCell(`${col}${totalRow}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
         });
 
-        // --- SHEET 2: TRANSAKSI ---
-        const sheet2 = workbook.addWorksheet('TRANSAKSI');
-        sheet2.getCell('A1').value = 'LAPORAN TRANSAKSI OPERASIONAL';
+        // --- SHEET 2: TRANSAKSI (BUKU KAS) ---
+        const sheet2 = workbook.addWorksheet('BUKU KAS');
+        sheet2.getCell('A1').value = 'LAPORAN TRANSAKSI OPERASIONAL (BUKU KAS)';
         sheet2.getCell('A1').font = { bold: true, size: 14 };
         
-        sheet2.getRow(3).values = ['No.', 'Keterangan', 'Qty', 'Harga', 'Total', 'Tanggal', 'Akun'];
+        sheet2.getRow(3).values = ['No.', 'Keterangan', 'Qty', 'Tipe', 'Masuk (Debit)', 'Keluar (Kredit)', 'Tanggal', 'Akun'];
         sheet2.getRow(3).eachCell(c => {
             c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
             c.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         });
 
-        expenseTransactions.forEach((row, i) => {
+        const allOperasional = houseTransactions.filter(t => t.type !== 'MODAL');
+        let debitTotal = 0;
+        let kreditTotal = 0;
+
+        allOperasional.forEach((row, i) => {
             const r = 4 + i;
-            sheet2.getRow(r).values = [i + 1, row.description, row.qty, row.price, row.total, new Date(row.date).toLocaleDateString('id-ID'), row.account];
-            sheet2.getCell(`D${r}`).numFmt = '#,##0';
+            const isIncome = row.type === 'INCOME';
+            if (isIncome) debitTotal += row.total;
+            else kreditTotal += row.total;
+
+            sheet2.getRow(r).values = [
+                i + 1, row.description, row.qty, row.type, 
+                isIncome ? row.total : 0, 
+                !isIncome ? row.total : 0, 
+                new Date(row.date).toLocaleDateString('id-ID'), row.account
+            ];
             sheet2.getCell(`E${r}`).numFmt = '#,##0';
+            sheet2.getCell(`F${r}`).numFmt = '#,##0';
         });
-        const lastTxRow = 4 + expenseTransactions.length;
+        const lastTxRow = 4 + allOperasional.length;
         sheet2.getCell(`D${lastTxRow}`).value = 'TOTAL';
-        sheet2.getCell(`E${lastTxRow}`).value = { formula: `SUM(E4:E${lastTxRow - 1})` };
+        sheet2.getCell(`E${lastTxRow}`).value = debitTotal;
+        sheet2.getCell(`F${lastTxRow}`).value = kreditTotal;
+        sheet2.getCell(`D${lastTxRow}`).font = { bold: true };
         sheet2.getCell(`E${lastTxRow}`).font = { bold: true };
+        sheet2.getCell(`F${lastTxRow}`).font = { bold: true };
         sheet2.getCell(`E${lastTxRow}`).numFmt = '#,##0';
+        sheet2.getCell(`F${lastTxRow}`).numFmt = '#,##0';
 
         // --- SHEET 3: MODAL ---
         const sheet3 = workbook.addWorksheet('MODAL');
@@ -235,6 +304,53 @@ export default function Finance() {
         modalTransactions.forEach((m, i) => {
             sheet3.getRow(4 + i).values = [i + 1, m.description, m.total, new Date(m.date).toLocaleDateString('id-ID')];
         });
+
+        // --- SHEET 4: ASET & PENYUSUTAN ---
+        const sheet4 = workbook.addWorksheet('ASET');
+        sheet4.getCell('A1').value = 'DAFTAR ASET & PENYUSUTAN';
+        sheet4.getCell('A1').font = { bold: true, size: 14 };
+        sheet4.getRow(3).values = ['No.', 'Nama Aset', 'Kategori', 'Tgl Beli', 'Nilai Beli', 'Kondisi', 'Penyusutan', 'Nilai Buku'];
+        sheet4.getRow(3).eachCell(c => {
+            c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
+            c.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        });
+        houseAssets.forEach((asset, i) => {
+            const dep = calculateDepreciation(asset);
+            const r = 4 + i;
+            sheet4.getRow(r).values = [
+                i + 1, asset.name, asset.category, 
+                new Date(asset.purchaseDate).toLocaleDateString('id-ID'), 
+                asset.purchasePrice, asset.condition, dep, asset.purchasePrice - dep
+            ];
+            sheet4.getCell(`E${r}`).numFmt = '#,##0';
+            sheet4.getCell(`G${r}`).numFmt = '#,##0';
+            sheet4.getCell(`H${r}`).numFmt = '#,##0';
+        });
+        
+        // Add Master Assets from FarmSettings
+        // Add Master Assets from FarmSettings
+
+        let rIndex = 4 + assets.length;
+        const addMasterAsset = (name: string, category: string, value: number, salvageValue: number, years: number) => {
+            const depreciableAmount = Math.max(0, value - salvageValue);
+            // Untuk excel master kita tampilkan beban penyusutan per tahun
+            const depPerYear = years ? depreciableAmount / years : 0;
+            sheet4.getRow(rIndex).values = [
+                rIndex - 3, name, category, '-', value, 'BAIK', depPerYear, value - depPerYear
+            ];
+            sheet4.getCell(`E${rIndex}`).numFmt = '#,##0';
+            sheet4.getCell(`G${rIndex}`).numFmt = '#,##0';
+            sheet4.getCell(`H${rIndex}`).numFmt = '#,##0';
+            rIndex++;
+        };
+        
+        addMasterAsset('Kandang & Bangunan (Master)', 'PROPERTI', farmSettings?.cageValueTotal || 0, farmSettings?.cageSalvageValue || 0, farmSettings?.cageLifeYears || 0);
+        addMasterAsset('Peralatan Farm (Master)', 'ALAT PRODUKSI', farmSettings?.equipmentValueTotal || 0, farmSettings?.equipmentSalvageValue || 0, farmSettings?.equipmentLifeYears || 0);
+        
+        // Depresiasi Aset Biologis (Ayam Pullet)
+        // Beban deplesi per tahun = (Biaya Perolehan - Nilai Afkir) / Umur Produktif
+        addMasterAsset('Ayam Pullet (Master Aset Biologis)', 'FLOCK / BIOLOGIS', farmSettings?.layerValueTotal || 0, farmSettings?.layerSalvageValue || 0, farmSettings?.layerLifeYears || 0);
+
 
         const buffer = await workbook.xlsx.writeBuffer();
         saveAs(new Blob([buffer]), 'Laporan_Keuangan_Eggly.xlsx');
@@ -247,11 +363,20 @@ export default function Finance() {
         const desc = formData.get('description') as string;
 
         if (amount > 0) {
-            addModalAwal(amount, desc);
-            Swal.fire({ title: 'Berhasil!', text: 'Modal telah ditambahkan.', icon: 'success', confirmButtonColor: '#0f172a' });
+            if (editingModal) {
+                updateTransaction(editingModal.id, { total: amount, price: amount, description: desc });
+                Swal.fire({ title: 'Berhasil!', text: 'Modal telah diubah.', icon: 'success', confirmButtonColor: '#0f172a' });
+            } else {
+                addModalAwal(amount, desc, activeHouse?.id);
+                Swal.fire({ title: 'Berhasil!', text: 'Modal telah ditambahkan.', icon: 'success', confirmButtonColor: '#0f172a' });
+            }
             setIsModalAwalOpen(false);
         }
     };
+
+    // Pagination Helpers
+    const paginatedProdLogs = filteredProdLogs.slice((prodPage - 1) * ITEMS_PER_PAGE, prodPage * ITEMS_PER_PAGE);
+    const paginatedTxs = transactions.filter(t => t.type !== 'MODAL').slice((txPage - 1) * ITEMS_PER_PAGE, txPage * ITEMS_PER_PAGE);
 
     return (
         <div className="space-y-8 pb-20">
@@ -301,7 +426,7 @@ export default function Finance() {
                             </div>
                         </div>
                         <button
-                            onClick={() => setIsModalAwalOpen(true)}
+                            onClick={() => { setEditingModal(null); setIsModalAwalOpen(true); }}
                             className="w-full bg-slate-100 text-slate-900 py-3 rounded-sm text-[10px] font-bold uppercase tracking-widest hover:bg-slate-200 transition-all border border-slate-200"
                         >
                             Suntik Modal
@@ -322,15 +447,8 @@ export default function Finance() {
                 <div className="lg:col-span-3 space-y-6">
                     {activeTab === 'BUKU_TELUR' && (
                         <div className="bg-white border border-slate-200 overflow-hidden shadow-sm">
-                            <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
+                            <div className="p-8 border-b border-slate-100 bg-slate-50/30">
                                 <h3 className="font-bold text-lg text-slate-900 uppercase tracking-tight italic">Buku Telur Produksi</h3>
-                                <button
-                                    onClick={handleExportExcel}
-                                    className="px-6 py-3 bg-emerald-600 text-white rounded-sm font-bold text-[10px] uppercase tracking-widest flex items-center space-x-2"
-                                >
-                                    <Download size={16} />
-                                    <span>Export Excel</span>
-                                </button>
                             </div>
 
                             <div className="overflow-x-auto p-4">
@@ -355,8 +473,8 @@ export default function Finance() {
                                             <th className="px-2 py-2 border border-slate-700">Buang</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="text-[10px] text-slate-700 font-medium">
-                                        {filteredProdLogs.map((row, idx) => (
+                                     <tbody className="text-[10px] text-slate-700 font-medium">
+                                        {paginatedProdLogs.map((row, idx) => (
                                             <tr key={idx} className="hover:bg-slate-50 border-b border-slate-100">
                                                 <td className="px-3 py-3 font-bold">{new Date(row.date).toLocaleDateString('id-ID')}</td>
                                                 <td className="px-2 py-3">{getNormalKg(row).toFixed(2)}</td>
@@ -385,7 +503,14 @@ export default function Finance() {
                                             <td></td>
                                         </tr>
                                     </tfoot>
-                                </table>
+                                 </table>
+                            </div>
+                            <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase">Page {prodPage} of {Math.ceil(filteredProdLogs.length / ITEMS_PER_PAGE) || 1}</span>
+                                <div className="flex space-x-2">
+                                    <button onClick={() => setProdPage(Math.max(1, prodPage - 1))} disabled={prodPage === 1} className="p-1 bg-white border border-slate-200 rounded-sm disabled:opacity-50"><ChevronLeft size={16} /></button>
+                                    <button onClick={() => setProdPage(Math.min(Math.ceil(filteredProdLogs.length / ITEMS_PER_PAGE), prodPage + 1))} disabled={prodPage >= Math.ceil(filteredProdLogs.length / ITEMS_PER_PAGE)} className="p-1 bg-white border border-slate-200 rounded-sm disabled:opacity-50"><ChevronRight size={16} /></button>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -407,8 +532,8 @@ export default function Finance() {
                                                     <th className="px-3 py-3">Tipe</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="text-[10px]">
-                                                {transactions.filter(t => t.type !== 'MODAL').map((t, idx) => (
+                                             <tbody className="text-[10px]">
+                                                {paginatedTxs.map((t, idx) => (
                                                     <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
                                                         <td className="px-3 py-3 font-bold">{t.description}</td>
                                                         <td className={cn("px-3 py-3 text-right font-mono font-black", t.type === 'INCOME' ? "text-emerald-600" : "text-rose-600")}>
@@ -423,15 +548,25 @@ export default function Finance() {
                                                     </tr>
                                                 ))}
                                             </tbody>
-                                        </table>
+                                         </table>
+                                    </div>
+                                    <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50 xl:col-span-3">
+                                        <span className="text-[10px] font-bold text-slate-500 uppercase">Page {txPage} of {Math.ceil(transactions.filter(t => t.type !== 'MODAL').length / ITEMS_PER_PAGE) || 1}</span>
+                                        <div className="flex space-x-2">
+                                            <button onClick={() => setTxPage(Math.max(1, txPage - 1))} disabled={txPage === 1} className="p-1 bg-white border border-slate-200 rounded-sm disabled:opacity-50"><ChevronLeft size={16} /></button>
+                                            <button onClick={() => setTxPage(Math.min(Math.ceil(transactions.filter(t => t.type !== 'MODAL').length / ITEMS_PER_PAGE), txPage + 1))} disabled={txPage >= Math.ceil(transactions.filter(t => t.type !== 'MODAL').length / ITEMS_PER_PAGE)} className="p-1 bg-white border border-slate-200 rounded-sm disabled:opacity-50"><ChevronRight size={16} /></button>
+                                        </div>
                                     </div>
                                     <div className="xl:col-span-1 bg-slate-50 p-4 border border-slate-200">
                                         <h4 className="text-[10px] font-black uppercase text-slate-400 mb-3">Modal Masuk</h4>
-                                        <div className="space-y-2">
+                                        <div className="space-y-3">
                                             {modalTransactions.map((m, i) => (
-                                                <div key={i} className="flex justify-between items-center text-[11px] font-bold">
+                                                <div key={i} className="flex justify-between items-center text-[11px] font-bold group">
                                                     <span className="text-slate-500">{m.description}</span>
-                                                    <span className="text-emerald-600">+{formatCurrency(m.total)}</span>
+                                                    <div className="flex items-center space-x-2">
+                                                        <span className="text-emerald-600">+{formatCurrency(m.total)}</span>
+                                                        <button onClick={() => { setEditingModal(m); setIsModalAwalOpen(true); }} className="text-slate-400 hover:text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity"><Edit2 size={12} /></button>
+                                                    </div>
                                                 </div>
                                             ))}
                                         </div>
@@ -443,7 +578,7 @@ export default function Finance() {
 
                     {activeTab === 'ASET' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {assets.map((asset) => {
+                            {houseAssets.map((asset) => {
                                 const depreciation = calculateDepreciation(asset);
                                 const currentValue = asset.purchasePrice - depreciation;
                                 return (
@@ -457,7 +592,10 @@ export default function Finance() {
                                     >
                                         <div className="flex justify-between items-start">
                                             <div>
-                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{asset.category}</p>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{asset.category}</p>
+                                                    <button onClick={(e) => { e.stopPropagation(); setEditingAsset(asset); setIsAssetModalOpen(true); }} className="text-slate-400 hover:text-amber-500"><Edit2 size={12} /></button>
+                                                </div>
                                                 <h4 className="font-bold text-slate-800 mt-1 uppercase tracking-tight">{asset.name}</h4>
                                             </div>
                                             <span className={cn(
@@ -487,8 +625,8 @@ export default function Finance() {
                                 );
                             })}
                             <button
-                                onClick={() => setIsAssetModalOpen(false)} // Placeholder for add asset
-                                className="bg-slate-50 border-2 border-dashed border-slate-200 p-6 flex flex-col items-center justify-center text-slate-400"
+                                onClick={() => { setEditingAsset(null); setIsAssetModalOpen(true); }}
+                                className="bg-slate-50 border-2 border-dashed border-slate-200 p-6 flex flex-col items-center justify-center text-slate-400 hover:border-amber-500 hover:text-amber-500 transition-colors"
                             >
                                 <Plus size={32} />
                                 <span className="text-[10px] font-bold uppercase mt-3">Tambah Aset Inventaris</span>
@@ -499,15 +637,53 @@ export default function Finance() {
             </div>
 
             {/* MODALS */}
-            <Modal isOpen={isModalAwalOpen} onClose={() => setIsModalAwalOpen(false)} title="Suntik Modal Usaha">
+            <Modal isOpen={isAssetModalOpen} onClose={() => setIsAssetModalOpen(false)} title={editingAsset ? "Edit Aset" : "Tambah Aset Baru"}>
+                <form onSubmit={handleSaveAsset} className="space-y-6">
+                    <div>
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Nama Aset</label>
+                        <input name="name" required type="text" defaultValue={editingAsset?.name} placeholder="Cth: Genset 5000W" className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Kategori</label>
+                        <select name="category" required defaultValue={editingAsset?.category} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500">
+                            <option value="Peralatan Kandang">Peralatan Kandang</option>
+                            <option value="Kendaraan">Kendaraan</option>
+                            <option value="Elektronik">Elektronik</option>
+                            <option value="Tanah & Bangunan">Tanah & Bangunan</option>
+                            <option value="Lainnya">Lainnya</option>
+                        </select>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Harga Beli</label>
+                            <input name="purchasePrice" required type="number" defaultValue={editingAsset?.purchasePrice} placeholder="Cth: 5000000" className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Nilai Sisa (Residu)</label>
+                            <input name="salvageValue" required type="number" defaultValue={editingAsset?.salvageValue || 0} placeholder="Cth: 500000" className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Umur (Thn)</label>
+                            <input name="expectedLifeYears" required type="number" defaultValue={editingAsset?.expectedLifeYears} placeholder="Cth: 5" className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Tanggal Beli</label>
+                        <input name="purchaseDate" required type="date" defaultValue={editingAsset ? editingAsset.purchaseDate.split('T')[0] : new Date().toISOString().split('T')[0]} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+                    </div>
+                    <button type="submit" className="w-full bg-slate-900 text-white py-4 rounded-sm font-bold text-[10px] uppercase tracking-[0.25em]">{editingAsset ? "Simpan Perubahan" : "Daftarkan Aset"}</button>
+                </form>
+            </Modal>
+
+            <Modal isOpen={isModalAwalOpen} onClose={() => setIsModalAwalOpen(false)} title={editingModal ? "Edit Modal Usaha" : "Suntik Modal Usaha"}>
                 <form onSubmit={handleAddModalSubmit} className="space-y-6">
                     <div>
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Nominal Suntik Modal</label>
-                        <input name="amount" required type="number" className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Nominal Modal</label>
+                        <input name="amount" required type="number" defaultValue={editingModal?.total} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
                     </div>
                     <div>
                         <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Keterangan</label>
-                        <input name="description" required type="text" placeholder="Contoh: Tambahan Modal Sendiri" className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
+                        <input name="description" required type="text" defaultValue={editingModal?.description} placeholder="Contoh: Tambahan Modal Sendiri" className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
                     </div>
                     <button type="submit" className="w-full bg-slate-900 text-white py-4 rounded-sm font-bold text-[10px] uppercase tracking-[0.25em]">Simpan Modal</button>
                 </form>

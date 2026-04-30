@@ -57,7 +57,7 @@ const MENU_ITEMS = [
   { id: 'feedFormulation', label: 'Formulasi Pakan', icon: PillBottle,      roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN] },
   { id: 'vaccine',         label: 'Vaksin & Biosekuriti', icon: Syringe,    roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.WORKER] },
   { id: 'sales',           label: 'Penjualan Telur', icon: ShoppingCart,    roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN] },
-  { id: 'inventory',       label: 'Stok Logistik',   icon: Package,         roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN] },
+  { id: 'inventory',       label: 'Stok Gudang',   icon: Package,         roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN] },
   { id: 'finance',         label: 'Keuangan & Aset', icon: Wallet,          roles: [UserRole.SUPER_ADMIN], badge: 'Owner' },
   { id: 'workers',         label: 'SDM & Payroll',   icon: Users,           roles: [UserRole.SUPER_ADMIN], badge: 'Owner' },
   { id: 'settings',        label: 'Konfigurasi',     icon: Settings,        roles: [UserRole.SUPER_ADMIN] },
