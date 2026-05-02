@@ -14,10 +14,11 @@ import {
   Settings,
   Save,
   Upload,
-  FileText
+  FileText,
+  MessageCircle
 } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import Modal from '../components/Modal';
 import Swal from 'sweetalert2';
 
@@ -42,6 +43,27 @@ export default function Inventory() {
   const [editingItem, setEditingItem] = useState<any>(null);
   const [activeTypeFilter, setActiveTypeFilter] = useState<string>('ALL');
   const [newItem, setNewItem] = useState({ id: '', name: '', quantity: 0, unit: 'kg', price: 0, type: ItemType.RAW_MATERIAL });
+  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+
+  const suppliers = farmSettings.suppliers || [];
+  const feedSuppliers = suppliers.filter(s => s.category === 'FEED' || s.category === 'MEDICINE');
+  const allSuppliers = [...feedSuppliers, ...suppliers.filter(s => s.category !== 'FEED' && s.category !== 'MEDICINE')];
+
+  const lowStockItems = inventory.filter(i => i.quantity <= i.reorderPoint && i.type !== ItemType.EGG_STOCK && i.houseId === activeHouse?.id);
+  const lowStockNames = lowStockItems.map(i => `${i.name}: ${i.quantity.toFixed(0)} ${i.unit}`).join(', ');
+  const orderMessage = encodeURIComponent(`Halo, saya butuh order pakan segera.\n\nStok menipis di kandang: ${activeHouse?.name}\nItem: ${lowStockNames}\n\nMohon konfirmasi ketersediaan dan harga. Terima kasih.`);
+
+  const getWhatsAppLink = (phone: string, message?: string) => {
+    const cleaned = phone.replace(/[^0-9]/g, '');
+    return message ? `https://wa.me/${cleaned}?text=${message}` : `https://wa.me/${cleaned}`;
+  };
+
+  const CATEGORY_LABEL: Record<string, string> = {
+    FEED: 'Pakan & Bahan Baku',
+    MEDICINE: 'Obat & Vaksin',
+    EQUIPMENT: 'Peralatan',
+    OTHER: 'Lainnya',
+  };
 
   const eggStockItems = inventory.filter(i => i.type === ItemType.EGG_STOCK && i.houseId === activeHouse?.id);
   const nonEggItems = inventory.filter(i => i.type !== ItemType.EGG_STOCK && i.houseId === activeHouse?.id);
@@ -226,14 +248,92 @@ export default function Inventory() {
                 </div>
                 <div>
                     <h4 className="text-amber-900 font-bold text-sm uppercase tracking-tight">Critical Warning: Stock Level</h4>
-                    <p className="text-slate-600 text-xs mt-0.5">Jagung/Konsentrat menipis. Estimasi lead time Payakumbuh: 3-5 hari. Order diperlukan hari ini.</p>
+                    <p className="text-slate-600 text-xs mt-0.5">
+                      {lowStockItems.length > 0
+                        ? `${lowStockItems.map(i => i.name).join(', ')} — stok di bawah reorder point. Segera order!`
+                        : 'Beberapa item stok menipis.'}
+                    </p>
                 </div>
             </div>
-            <button className="bg-slate-900 text-white px-4 py-2 rounded-sm text-[10px] font-bold uppercase tracking-widest hover:bg-slate-800 transition-colors">
-                Order Online
+            <button
+                onClick={() => setIsOrderModalOpen(true)}
+                className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-sm text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-700 transition-colors shadow-md whitespace-nowrap"
+            >
+                <MessageCircle size={14} />
+                Order via WhatsApp
             </button>
         </motion.div>
       )}
+
+      {/* WhatsApp Order Supplier Modal */}
+      <AnimatePresence>
+        {isOrderModalOpen && (
+          <Modal isOpen={isOrderModalOpen} onClose={() => setIsOrderModalOpen(false)} title="Order via WhatsApp Supplier">
+            <div className="space-y-6">
+              {lowStockItems.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 mb-2">Stok yang perlu diorder:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {lowStockItems.map(i => (
+                      <span key={i.id} className="bg-white border border-amber-200 px-2 py-1 text-[9px] font-bold text-amber-700 uppercase">
+                        {i.name}: {i.quantity.toFixed(0)} {i.unit}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {allSuppliers.length === 0 ? (
+                <div className="text-center py-8">
+                  <MessageCircle size={32} className="mx-auto text-slate-300 mb-3" />
+                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Belum ada data supplier</p>
+                  <p className="text-[10px] text-slate-400 mt-1">Tambahkan supplier di Konfigurasi › Mitra & Supplier</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Pilih supplier untuk dihubungi:</p>
+                  {allSuppliers.map(supplier => (
+                    <div key={supplier.id} className="p-4 bg-slate-50 border border-slate-100 hover:border-emerald-300 transition-all group">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="text-[12px] font-black uppercase text-slate-900 tracking-tighter italic">{supplier.name}</p>
+                            <span className="text-[8px] bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-sm font-bold uppercase text-slate-500">
+                              {CATEGORY_LABEL[supplier.category] || supplier.category}
+                            </span>
+                          </div>
+                          {supplier.notes && <p className="text-[9px] text-slate-400 font-medium">{supplier.notes}</p>}
+                          <p className="text-[9px] text-slate-400 mt-1">📱 {supplier.whatsappNumber}</p>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <a
+                            href={getWhatsAppLink(supplier.whatsappNumber, orderMessage)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-1.5 bg-emerald-500 text-white px-3 py-2 text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-colors whitespace-nowrap"
+                          >
+                            <MessageCircle size={11} />
+                            Order Sekarang
+                          </a>
+                          <a
+                            href={getWhatsAppLink(supplier.whatsappNumber)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-1.5 bg-slate-100 text-slate-600 border border-slate-200 px-3 py-2 text-[9px] font-bold uppercase tracking-widest hover:bg-white transition-colors whitespace-nowrap"
+                          >
+                            <MessageCircle size={11} />
+                            Chat Saja
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </Modal>
+        )}
+      </AnimatePresence>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">

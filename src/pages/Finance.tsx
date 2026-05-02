@@ -43,6 +43,7 @@ export default function Finance() {
     const [activeTab, setActiveTab] = useState<'BUKU_TELUR' | 'BUKU_TRANSAKSI' | 'ASET'>('BUKU_TELUR');
     const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
     const [editingAsset, setEditingAsset] = useState<any | null>(null);
+    const [assetOwnershipType, setAssetOwnershipType] = useState<'BELI' | 'MILIK_PRIBADI'>('BELI');
     const [isModalAwalOpen, setIsModalAwalOpen] = useState(false);
     const [editingModal, setEditingModal] = useState<any | null>(null);
     const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -168,23 +169,28 @@ export default function Finance() {
                 expectedLifeYears,
                 condition: 'BAIK'
             });
-            // Masukkan ke transaksi pengeluaran (pembelian aset)
-            addTransaction({
-                houseId: activeHouse?.id,
-                date: purchaseDate,
-                description: `Pembelian Aset: ${name} (${category})`,
-                qty: '1 Unit',
-                price: purchasePrice,
-                total: purchasePrice,
-                account: 'Kas Tunai',
-                type: 'EXPENSE',
-                category: 'Aset'
-            });
 
-            Swal.fire({ title: 'Berhasil!', text: 'Aset telah didaftarkan dan tercatat di Buku Kas.', icon: 'success', confirmButtonColor: '#0f172a' });
+            // Hanya catat ke buku kas jika jenis perolehan adalah BELI (bukan Milik Pribadi)
+            if (assetOwnershipType === 'BELI') {
+                addTransaction({
+                    houseId: activeHouse?.id,
+                    date: purchaseDate,
+                    description: `Pembelian Aset: ${name} (${category})`,
+                    qty: '1 Unit',
+                    price: purchasePrice,
+                    total: purchasePrice,
+                    account: 'Kas Tunai',
+                    type: 'EXPENSE',
+                    category: 'Aset'
+                });
+                Swal.fire({ title: 'Berhasil!', text: 'Aset telah didaftarkan dan tercatat sebagai pengeluaran di Buku Kas.', icon: 'success', confirmButtonColor: '#0f172a' });
+            } else {
+                Swal.fire({ title: 'Berhasil!', text: 'Aset (Milik Pribadi) telah didaftarkan. Tidak dicatat sebagai pembelian di Buku Kas.', icon: 'success', confirmButtonColor: '#0f172a' });
+            }
         }
 
         setIsAssetModalOpen(false);
+        setAssetOwnershipType('BELI');
     };
 
     const handleExportExcel = async () => {
@@ -625,7 +631,7 @@ export default function Finance() {
                                 );
                             })}
                             <button
-                                onClick={() => { setEditingAsset(null); setIsAssetModalOpen(true); }}
+                                onClick={() => { setEditingAsset(null); setAssetOwnershipType('BELI'); setIsAssetModalOpen(true); }}
                                 className="bg-slate-50 border-2 border-dashed border-slate-200 p-6 flex flex-col items-center justify-center text-slate-400 hover:border-amber-500 hover:text-amber-500 transition-colors"
                             >
                                 <Plus size={32} />
@@ -637,8 +643,48 @@ export default function Finance() {
             </div>
 
             {/* MODALS */}
-            <Modal isOpen={isAssetModalOpen} onClose={() => setIsAssetModalOpen(false)} title={editingAsset ? "Edit Aset" : "Tambah Aset Baru"}>
+            <Modal isOpen={isAssetModalOpen} onClose={() => { setIsAssetModalOpen(false); setAssetOwnershipType('BELI'); }} title={editingAsset ? "Edit Aset" : "Tambah Aset Baru"}>
                 <form onSubmit={handleSaveAsset} className="space-y-6">
+                    {/* Ownership Type — hanya tampil saat tambah baru */}
+                    {!editingAsset && (
+                        <div>
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-3">Jenis Perolehan Aset</label>
+                            <div className="grid grid-cols-2 gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setAssetOwnershipType('BELI')}
+                                    className={cn(
+                                        "p-4 border-2 text-left transition-all rounded-sm",
+                                        assetOwnershipType === 'BELI'
+                                            ? "border-amber-500 bg-amber-50"
+                                            : "border-slate-200 bg-slate-50 hover:border-slate-300"
+                                    )}
+                                >
+                                    <p className={cn("text-[11px] font-black uppercase tracking-tight", assetOwnershipType === 'BELI' ? 'text-amber-700' : 'text-slate-500')}>🛒 Beli</p>
+                                    <p className="text-[9px] text-slate-400 mt-1 leading-relaxed">Aset dibeli. Akan dicatat sebagai pengeluaran di Buku Kas.</p>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setAssetOwnershipType('MILIK_PRIBADI')}
+                                    className={cn(
+                                        "p-4 border-2 text-left transition-all rounded-sm",
+                                        assetOwnershipType === 'MILIK_PRIBADI'
+                                            ? "border-slate-700 bg-slate-900"
+                                            : "border-slate-200 bg-slate-50 hover:border-slate-300"
+                                    )}
+                                >
+                                    <p className={cn("text-[11px] font-black uppercase tracking-tight", assetOwnershipType === 'MILIK_PRIBADI' ? 'text-white' : 'text-slate-500')}>🏠 Milik Pribadi</p>
+                                    <p className={cn("text-[9px] mt-1 leading-relaxed", assetOwnershipType === 'MILIK_PRIBADI' ? 'text-slate-400' : 'text-slate-400')}>Aset milik pemilik. Tidak dicatat sebagai pembelian di laporan keuangan.</p>
+                                </button>
+                            </div>
+                            {assetOwnershipType === 'MILIK_PRIBADI' && (
+                                <div className="mt-2 p-3 bg-slate-800 border border-slate-700 flex items-start gap-2">
+                                    <span className="text-amber-400 text-xs mt-0.5">ℹ</span>
+                                    <p className="text-[9px] text-slate-400 leading-relaxed">Aset ini hanya akan didaftarkan ke registri aset (untuk tracking penyusutan & kondisi), namun <strong className="text-white">tidak akan muncul sebagai pengeluaran</strong> di Buku Kas / Laporan Keuangan.</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
                     <div>
                         <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Nama Aset</label>
                         <input name="name" required type="text" defaultValue={editingAsset?.name} placeholder="Cth: Genset 5000W" className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
@@ -655,7 +701,7 @@ export default function Finance() {
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
-                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Harga Beli</label>
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Harga Beli / Estimasi Nilai (IDR)</label>
                             <input name="purchasePrice" required type="number" defaultValue={editingAsset?.purchasePrice} placeholder="Cth: 5000000" className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
                         </div>
                         <div>
@@ -663,15 +709,22 @@ export default function Finance() {
                             <input name="salvageValue" required type="number" defaultValue={editingAsset?.salvageValue || 0} placeholder="Cth: 500000" className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
                         </div>
                         <div>
-                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Umur (Thn)</label>
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Umur Ekonomis (Thn)</label>
                             <input name="expectedLifeYears" required type="number" defaultValue={editingAsset?.expectedLifeYears} placeholder="Cth: 5" className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
                         </div>
                     </div>
                     <div>
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Tanggal Beli</label>
+                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">{assetOwnershipType === 'BELI' ? 'Tanggal Beli' : 'Tanggal Perolehan / Estimasi'}</label>
                         <input name="purchaseDate" required type="date" defaultValue={editingAsset ? editingAsset.purchaseDate.split('T')[0] : new Date().toISOString().split('T')[0]} className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:outline-none focus:border-amber-500" />
                     </div>
-                    <button type="submit" className="w-full bg-slate-900 text-white py-4 rounded-sm font-bold text-[10px] uppercase tracking-[0.25em]">{editingAsset ? "Simpan Perubahan" : "Daftarkan Aset"}</button>
+                    <button type="submit" className={cn(
+                        "w-full py-4 rounded-sm font-bold text-[10px] uppercase tracking-[0.25em] transition-all",
+                        assetOwnershipType === 'MILIK_PRIBADI'
+                            ? "bg-slate-800 text-white hover:bg-slate-700"
+                            : "bg-slate-900 text-white hover:bg-slate-800"
+                    )}>
+                        {editingAsset ? "Simpan Perubahan" : assetOwnershipType === 'MILIK_PRIBADI' ? "Daftarkan sebagai Milik Pribadi" : "Daftarkan Aset & Catat Pengeluaran"}
+                    </button>
                 </form>
             </Modal>
 

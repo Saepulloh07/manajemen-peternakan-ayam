@@ -58,6 +58,24 @@ export default function Settings() {
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<any | null>(null);
 
+  // --- Targets & Tolerances Local State (for explicit Save) ---
+  const [targetForm, setTargetForm] = React.useState({
+    globalTargetHDP: farmSettings.globalTargetHDP,
+    targetFCR: farmSettings.targetFCR,
+    mortalityAlertThreshold: farmSettings.mortalityAlertThreshold,
+    lowHDPAlertThreshold: farmSettings.lowHDPAlertThreshold,
+    stdFeedIntake: farmSettings.stdFeedIntake,
+    wasteFreePercentage: farmSettings.wasteFreePercentage,
+  });
+  const [targetSaved, setTargetSaved] = React.useState(false);
+
+  const handleSaveTargets = () => {
+    saveFarmSettings(targetForm);
+    setTargetSaved(true);
+    setTimeout(() => setTargetSaved(false), 2500);
+    Swal.fire({ title: 'Target Disimpan!', text: 'Standar operasional telah diperbarui dan berlaku di seluruh halaman.', icon: 'success', confirmButtonColor: '#0f172a', timer: 2000, showConfirmButton: false });
+  };
+
   const sections = [
     { id: 'HOUSES', label: 'Manajemen Kandang', icon: Home },
     { id: 'FLOCKS', label: 'Manajemen Batch/Flock', icon: Hash },
@@ -585,57 +603,120 @@ export default function Settings() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
                                 {/* Production Targets */}
                                 <div className="space-y-6">
-                                    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600 flex items-center gap-2">
-                                        <Shield size={14} /> Target & Batas Toleransi
-                                    </h4>
-                                    <div className="space-y-4">
-                                        <div>
-                                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Target HDP (%)</label>
+                                    <div className="flex items-center justify-between">
+                                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-600 flex items-center gap-2">
+                                            <Shield size={14} /> Target & Batas Toleransi
+                                        </h4>
+                                        <button
+                                            onClick={handleSaveTargets}
+                                            className={cn(
+                                                "flex items-center gap-2 px-4 py-2 text-[9px] font-black uppercase tracking-[0.15em] transition-all shadow-sm border",
+                                                targetSaved
+                                                    ? "bg-emerald-500 text-white border-emerald-600"
+                                                    : "bg-slate-900 text-white border-slate-800 hover:bg-slate-700"
+                                            )}
+                                        >
+                                            <Save size={11} />
+                                            {targetSaved ? 'Tersimpan ✓' : 'Simpan'}
+                                        </button>
+                                    </div>
+                                    <p className="text-[9px] text-slate-400 font-medium italic leading-relaxed -mt-4">
+                                        Nilai di bawah berlaku secara global di Dashboard, Produksi, dan Laporan.
+                                    </p>
+                                    <div className="space-y-5">
+                                        <div className="bg-slate-50 border border-slate-100 p-4 space-y-1">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-700">Target HDP Global (%)</label>
+                                                <span className="text-[9px] text-amber-600 font-black">{targetForm.globalTargetHDP}%</span>
+                                            </div>
+                                            <p className="text-[9px] text-slate-400 mb-2">Persentase Hen-Day Production minimum yang diharapkan. Biasanya 80–95%.</p>
                                             <input 
-                                                type="number" 
-                                                value={farmSettings.globalTargetHDP} 
-                                                onChange={(e) => saveFarmSettings({ globalTargetHDP: Number(e.target.value) })}
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:border-amber-500"
+                                                type="range"
+                                                min={50} max={100} step={1}
+                                                value={targetForm.globalTargetHDP}
+                                                onChange={(e) => setTargetForm(prev => ({ ...prev, globalTargetHDP: Number(e.target.value) }))}
+                                                className="w-full accent-amber-500"
+                                            />
+                                            <div className="flex justify-between text-[8px] text-slate-400 font-bold">
+                                                <span>50%</span><span>75%</span><span>100%</span>
+                                            </div>
+                                        </div>
+                                        <div className="bg-slate-50 border border-slate-100 p-4 space-y-1">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-700">Alert HDP Turun (%)</label>
+                                                <span className="text-[9px] text-rose-500 font-black">−{targetForm.lowHDPAlertThreshold}%</span>
+                                            </div>
+                                            <p className="text-[9px] text-slate-400 mb-2">Sistem memperingatkan jika HDP turun lebih dari nilai ini di bawah kurva standar strain.</p>
+                                            <input
+                                                type="range"
+                                                min={1} max={20} step={1}
+                                                value={targetForm.lowHDPAlertThreshold}
+                                                onChange={(e) => setTargetForm(prev => ({ ...prev, lowHDPAlertThreshold: Number(e.target.value) }))}
+                                                className="w-full accent-rose-500"
+                                            />
+                                            <div className="flex justify-between text-[8px] text-slate-400 font-bold">
+                                                <span>1%</span><span>10%</span><span>20%</span>
+                                            </div>
+                                        </div>
+                                        <div className="bg-slate-50 border border-slate-100 p-4 space-y-1">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-700">Target FCR</label>
+                                                <span className="text-[9px] text-blue-600 font-black">{targetForm.targetFCR.toFixed(2)}</span>
+                                            </div>
+                                            <p className="text-[9px] text-slate-400 mb-2">Feed Conversion Ratio ideal. Layer petelur biasanya 1.9–2.3. Makin rendah makin efisien.</p>
+                                            <input
+                                                type="number" step="0.01" min={1} max={5}
+                                                value={targetForm.targetFCR}
+                                                onChange={(e) => setTargetForm(prev => ({ ...prev, targetFCR: Number(e.target.value) }))}
+                                                className="w-full bg-white border border-slate-200 rounded-sm px-3 py-2 text-sm font-bold focus:border-amber-500 outline-none"
                                             />
                                         </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Target FCR</label>
-                                            <input 
-                                                type="number" 
-                                                step="0.01"
-                                                value={farmSettings.targetFCR} 
-                                                onChange={(e) => saveFarmSettings({ targetFCR: Number(e.target.value) })}
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:border-amber-500"
+                                        <div className="bg-slate-50 border border-slate-100 p-4 space-y-1">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-700">Batas Mortalitas / Bulan (%)</label>
+                                                <span className="text-[9px] text-rose-500 font-black">{targetForm.mortalityAlertThreshold}%</span>
+                                            </div>
+                                            <p className="text-[9px] text-slate-400 mb-2">Alert mortalitas jika melebihi batas ini per bulan. Standar aman: 0.5% – 1%/bulan.</p>
+                                            <input
+                                                type="range"
+                                                min={0.1} max={5} step={0.1}
+                                                value={targetForm.mortalityAlertThreshold}
+                                                onChange={(e) => setTargetForm(prev => ({ ...prev, mortalityAlertThreshold: Number(e.target.value) }))}
+                                                className="w-full accent-rose-500"
+                                            />
+                                            <div className="flex justify-between text-[8px] text-slate-400 font-bold">
+                                                <span>0.1%</span><span>2.5%</span><span>5%</span>
+                                            </div>
+                                        </div>
+                                        <div className="bg-slate-50 border border-slate-100 p-4 space-y-1">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-700">Std. Intake Pakan (g/ekor/hari)</label>
+                                                <span className="text-[9px] text-emerald-600 font-black">{targetForm.stdFeedIntake}g</span>
+                                            </div>
+                                            <p className="text-[9px] text-slate-400 mb-2">Konsumsi pakan standar per ekor. Layer biasanya 100–130 g/ekor/hari.</p>
+                                            <input
+                                                type="number" min={80} max={200}
+                                                value={targetForm.stdFeedIntake}
+                                                onChange={(e) => setTargetForm(prev => ({ ...prev, stdFeedIntake: Number(e.target.value) }))}
+                                                className="w-full bg-white border border-slate-200 rounded-sm px-3 py-2 text-sm font-bold focus:border-amber-500 outline-none"
                                             />
                                         </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Batas Mortalitas / Bulan (%)</label>
-                                            <input 
-                                                type="number" 
-                                                step="0.1"
-                                                value={farmSettings.mortalityAlertThreshold} 
-                                                onChange={(e) => saveFarmSettings({ mortalityAlertThreshold: Number(e.target.value) })}
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:border-amber-500"
+                                        <div className="bg-slate-50 border border-slate-100 p-4 space-y-1">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-700">Batas Waste & Free Goods (%)</label>
+                                                <span className="text-[9px] text-amber-600 font-black">{targetForm.wasteFreePercentage}%</span>
+                                            </div>
+                                            <p className="text-[9px] text-slate-400 mb-2">Persentase maksimum produksi yang boleh dijadikan barang rusak atau diberikan gratis.</p>
+                                            <input
+                                                type="range"
+                                                min={0} max={10} step={0.5}
+                                                value={targetForm.wasteFreePercentage}
+                                                onChange={(e) => setTargetForm(prev => ({ ...prev, wasteFreePercentage: Number(e.target.value) }))}
+                                                className="w-full accent-amber-500"
                                             />
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Std. Intake Pakan (g/ekor)</label>
-                                            <input 
-                                                type="number" 
-                                                value={farmSettings.stdFeedIntake} 
-                                                onChange={(e) => saveFarmSettings({ stdFeedIntake: Number(e.target.value) })}
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:border-amber-500"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Waste & Free Goods (%)</label>
-                                            <input 
-                                                type="number" 
-                                                step="0.1"
-                                                value={farmSettings.wasteFreePercentage} 
-                                                onChange={(e) => saveFarmSettings({ wasteFreePercentage: Number(e.target.value) })}
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-4 py-3 text-sm font-bold focus:border-amber-500"
-                                            />
+                                            <div className="flex justify-between text-[8px] text-slate-400 font-bold">
+                                                <span>0%</span><span>5%</span><span>10%</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
