@@ -20,7 +20,7 @@ export const generateSalarySlip = (data: SalarySlipData) => {
   doc.setTextColor(15, 23, 42); // slate-900
   doc.setFont('helvetica', 'bold');
   doc.text('SLIP GAJI KARYAWAN', pageWidth / 2, 25, { align: 'center' });
-  
+
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100, 116, 139); // slate-500
@@ -33,7 +33,7 @@ export const generateSalarySlip = (data: SalarySlipData) => {
   // --- Info Section ---
   doc.setFontSize(10);
   doc.setTextColor(51, 65, 85); // slate-700
-  
+
   // Left Column
   doc.setFont('helvetica', 'bold');
   doc.text('Nama Personel:', 20, 55);
@@ -41,7 +41,7 @@ export const generateSalarySlip = (data: SalarySlipData) => {
   doc.text(data.workerName, 60, 55);
 
   doc.setFont('helvetica', 'bold');
-  doc.text('Jabatan / Role:', 20, 62);
+  doc.text('Jabatan:', 20, 62);
   doc.setFont('helvetica', 'normal');
   doc.text(data.role.replace('_', ' '), 60, 62);
 
@@ -59,7 +59,7 @@ export const generateSalarySlip = (data: SalarySlipData) => {
   // --- Table Breakdown ---
   const tableData = [
     ['Gaji Pokok', '', formatCurrency(data.baseSalary)],
-    ...data.boronganItems.map(item => [item.label, '(Borongan)', formatCurrency(item.amount)]),
+    ...data.boronganItems.map(item => [item.label, '(Upah Jasa)', formatCurrency(item.amount)]),
   ];
 
   autoTable(doc, {
@@ -76,10 +76,10 @@ export const generateSalarySlip = (data: SalarySlipData) => {
 
   // --- Total Section ---
   const finalY = (doc as any).lastAutoTable.finalY + 10;
-  
+
   doc.setFillColor(248, 250, 252); // slate-50
   doc.rect(120, finalY, pageWidth - 140, 15, 'F');
-  
+
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(15, 23, 42);
@@ -95,7 +95,7 @@ export const generateSalarySlip = (data: SalarySlipData) => {
   doc.setFont('helvetica', 'bold');
   doc.text('Owner Farm', 40, footerY);
   doc.line(20, footerY + 15, 70, footerY + 15);
-  
+
   doc.text('Penerima', pageWidth - 70, footerY);
   doc.line(pageWidth - 80, footerY + 15, pageWidth - 30, footerY + 15);
 

@@ -123,7 +123,7 @@ export default function Dashboard() {
         const hdp = log && currentCount > 0 ? (log.eggCount / currentCount) * 100 : null;
         result.push({
           name: d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }),
-          produksi: log ? log.totalKg : 0,
+          produksi: log ? (log.totalButir ?? (log as any).totalKg ?? 0) : 0,
           pakan: log ? log.feedConsumed : 0,
           hdp: hdp ? parseFloat(hdp.toFixed(1)) : null,
           standar: getStrainStandardHDP(ageWeeks),
@@ -143,7 +143,7 @@ export default function Dashboard() {
         houseLogs.forEach(l => {
           const ld = new Date(l.date);
           if (ld >= startD && ld <= endD) {
-             totalProd += l.totalKg;
+             totalProd += (l.totalButir ?? (l as any).totalKg ?? 0);
              totalPakan += l.feedConsumed;
              totalMortality += l.mortality;
              totalEggCount += l.eggCount;
@@ -172,7 +172,7 @@ export default function Dashboard() {
         
         houseLogs.forEach(l => {
           if (l.date.startsWith(monthStr)) {
-             totalProd += l.totalKg;
+             totalProd += (l.totalButir ?? (l as any).totalKg ?? 0);
              totalPakan += l.feedConsumed;
              totalMortality += l.mortality;
              totalEggCount += l.eggCount;
@@ -202,8 +202,8 @@ export default function Dashboard() {
   const todayHDP = lastLog && currentCount > 0 ? (lastLog.eggCount / currentCount) * 100 : 0;
 
   const totalFeed = houseLogs.reduce((a, b) => a + b.feedConsumed, 0);
-  const totalEggKg = houseLogs.reduce((a, b) => a + b.totalKg, 0);
-  const cumulativeFCR = totalEggKg > 0 ? totalFeed / totalEggKg : 0;
+  const totalButirCount = houseLogs.reduce((a, b) => a + (b.totalButir ?? (b as any).totalKg ?? 0), 0);
+  const cumulativeFCR = totalButirCount > 0 ? totalFeed / totalButirCount : 0;
 
   const feedIntakePerBird = lastLog && currentCount > 0 ? (lastLog.feedConsumed * 1000) / currentCount : 0;
 
@@ -407,7 +407,7 @@ export default function Dashboard() {
                   <Tooltip contentStyle={{ fontSize: '11px', borderRadius: '4px' }} />
                   <Legend wrapperStyle={{ fontSize: '10px' }} />
                   <Bar dataKey="pakan" name="Pakan (kg)" fill="#0f172a" radius={[2, 2, 0, 0]} />
-                  <Bar dataKey="produksi" name="Telur (kg)" fill="#f59e0b" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="produksi" name="Telur (butir)" fill="#f59e0b" radius={[2, 2, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -461,7 +461,7 @@ export default function Dashboard() {
                   <div key={item.name}>
                     <div className="flex justify-between text-[10px] font-bold mb-1">
                       <span className="text-slate-600">{item.name}</span>
-                      <span style={{ color: item.fill }}>{item.value.toFixed(2)} kg</span>
+                      <span style={{ color: item.fill }}>{item.value.toLocaleString()} butir</span>
                     </div>
                     <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                       <motion.div
@@ -476,7 +476,7 @@ export default function Dashboard() {
                 ))}
                 <div className="pt-2 border-t border-slate-100 flex justify-between">
                   <span className="text-[9px] text-slate-400 font-bold uppercase">Total</span>
-                  <span className="text-[10px] font-black text-slate-900">{lastLog.totalKg.toFixed(2)} kg</span>
+                  <span className="text-[10px] font-black text-slate-900">{(lastLog.totalButir ?? (lastLog as any).totalKg ?? 0).toLocaleString()} butir</span>
                 </div>
               </div>
             ) : (
@@ -492,7 +492,7 @@ export default function Dashboard() {
             <div className="space-y-3">
               {[
                 { label: 'Populasi Aktif', value: currentCount.toLocaleString() + ' ekor' },
-                { label: 'Total Produksi', value: totalEggKg.toFixed(1) + ' kg' },
+                { label: 'Total Produksi', value: totalButirCount.toLocaleString() + ' butir' },
                 { label: 'Total Pakan', value: totalFeed.toFixed(1) + ' kg' },
                 { label: 'Net Profit', value: formatCurrency(netPL) },
               ].map(s => (

@@ -214,8 +214,8 @@ export interface FlockAnalytics {
   houseId: string;
   cumulativeFCR: number;
   feedIntakePerBirdGrams: number;
-  hppPerKg: number;            // Harga Pokok Produksi per kg telur
-  totalEggKg: number;
+  hppPerButir: number;          // Harga Pokok Produksi per butir telur
+  totalButir: number;
   totalFeedCost: number;
   netPL?: number;              // SUPER_ADMIN only
 }

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
     Wallet,
     Plus,
@@ -33,7 +33,7 @@ import { saveAs } from 'file-saver';
 import { useHouse } from '../HouseContext';
 import { useGlobalData } from '../GlobalContext';
 import { useFlock } from '../FlockContext';
-import { EggCategory } from '../types';
+import { EggCategory, Asset } from '../types';
 
 export default function Finance() {
     const { activeHouse } = useHouse();
@@ -66,8 +66,13 @@ export default function Finance() {
 
     const houseAssets = assets.filter(a => a.houseId === activeHouse?.id);
 
+    // For BUKU_TRANSAKSI - separate into 3 ledgers
+    const salesTransactions = houseTransactions.filter(t => t.type === 'INCOME' && (t.category === 'Penjualan' || t.category === 'Free Goods'));
+    const bahanTransactions = houseTransactions.filter(t => t.type === 'EXPENSE' && (t.description.toLowerCase().includes('stok') || t.description.toLowerCase().includes('pakan') || t.description.toLowerCase().includes('bahan') || t.description.toLowerCase().includes('beli stok') || t.description.toLowerCase().includes('pembelian stok')));
+    const operasionalTransactions = houseTransactions.filter(t => t.type === 'EXPENSE' && !bahanTransactions.find(b => b.id === t.id));
+
     // --- Total Calculations ---
-    const totalProduction = filteredProdLogs.reduce((acc, curr) => acc + curr.totalKg, 0);
+    const totalProduction = filteredProdLogs.reduce((acc, curr) => acc + (curr.totalButir ?? (curr as any).totalKg ?? 0), 0);
     const totalSalesTelur = filteredSalesLogs.reduce((acc, curr) => acc + curr.total, 0);
     const totalExpenses = expenseTransactions.reduce((acc, curr) => acc + curr.total, 0);
     const totalIncome = incomeTransactions.reduce((acc, curr) => acc + curr.total, 0);
@@ -82,36 +87,62 @@ export default function Finance() {
     const currentPopulation = activeFlock?.currentCount || 0;
 
     // ─── Egg Categorization Helpers ───────────────────────────────────────────
-    const getNormalKg = (log: typeof filteredProdLogs[0]) =>
+    const getNormalButir = (log: typeof filteredProdLogs[0]) =>
         (log.breakdown[EggCategory.BM] || 0) +
         (log.breakdown[EggCategory.KRC] || 0) +
         (log.breakdown[EggCategory.KS] || 0) +
         (log.breakdown[EggCategory.PELOR] || 0);
 
-    const getRetakKg = (log: typeof filteredProdLogs[0]) =>
+    const getRetakButir = (log: typeof filteredProdLogs[0]) =>
         (log.breakdown[EggCategory.KRC_RETAK] || 0) +
         (log.breakdown[EggCategory.KS_RETAK] || 0) +
         (log.breakdown[EggCategory.RETAK] || 0);
 
-    const getPecahKg = (log: typeof filteredProdLogs[0]) =>
+    const getPecahButir = (log: typeof filteredProdLogs[0]) =>
         (log.breakdown[EggCategory.PECAH] || 0) + (log.discardedEggs || 0);
 
-    const getSoldByDate = (date: string, category: 'NORMAL' | 'RETAK') => {
-        const normalCats = [EggCategory.BM, EggCategory.KRC, EggCategory.KS, EggCategory.PELOR];
-        const retakCats = [EggCategory.KRC_RETAK, EggCategory.KS_RETAK, EggCategory.RETAK];
+    const getSoldByDate = (date: string, category: 'NORMAL' | 'RETAK', isFree = false) => {
+        const normalCats = ['BM', 'KRC', 'KS', 'PELOR', EggCategory.BM, EggCategory.KRC, EggCategory.KS, EggCategory.PELOR];
+        const retakCats = ['KRC_RETAK', 'KS_RETAK', 'RETAK', EggCategory.KRC_RETAK, EggCategory.KS_RETAK, EggCategory.RETAK, 'KRC_Retak', 'KS_Retak'];
         const cats = category === 'NORMAL' ? normalCats : retakCats;
         return filteredSalesLogs
-            .filter(s => s.date === date && cats.includes(s.category as EggCategory) && !s.isFree)
+            .filter(s => s.date === date && cats.includes(s.category) && !!s.isFree === isFree)
             .reduce((a, b) => a + b.quantity, 0);
     };
-    const getFreeSoldByDate = (date: string) =>
-        filteredSalesLogs.filter(s => s.date === date && s.isFree).reduce((a, b) => a + b.quantity, 0);
 
-    const totalNormal = filteredProdLogs.reduce((a, b) => a + getNormalKg(b), 0);
-    const totalRetak = filteredProdLogs.reduce((a, b) => a + getRetakKg(b), 0);
-    const totalPecah = filteredProdLogs.reduce((a, b) => a + getPecahKg(b), 0);
+    const totalNormal = filteredProdLogs.reduce((a, b) => a + getNormalButir(b), 0);
+    const totalRetak = filteredProdLogs.reduce((a, b) => a + getRetakButir(b), 0);
+    const totalPecah = filteredProdLogs.reduce((a, b) => a + getPecahButir(b), 0);
 
-    const calculateDepreciation = (asset: any) => {
+    const totalNormalSold = filteredProdLogs.reduce((a, b) => a + getSoldByDate(b.date, 'NORMAL', false), 0);
+    const totalNormalFree = filteredProdLogs.reduce((a, b) => a + getSoldByDate(b.date, 'NORMAL', true), 0);
+    const totalRetakSold = filteredProdLogs.reduce((a, b) => a + getSoldByDate(b.date, 'RETAK', false), 0);
+    const totalRetakFree = filteredProdLogs.reduce((a, b) => a + getSoldByDate(b.date, 'RETAK', true), 0);
+
+    // Calculate daily balance flow
+    const productionWithBalance = useMemo(() => {
+        const sortedLogs = [...filteredProdLogs].sort((a, b) => a.date.localeCompare(b.date));
+        let runningBalance = 0;
+        return sortedLogs.map(log => {
+            const prod = log.totalButir ?? (log as any).totalKg ?? 0;
+            const soldN = getSoldByDate(log.date, 'NORMAL', false);
+            const freeN = getSoldByDate(log.date, 'NORMAL', true);
+            const soldR = getSoldByDate(log.date, 'RETAK', false);
+            const freeR = getSoldByDate(log.date, 'RETAK', true);
+            const waste = log.discardedEggs || 0;
+            const totalOut = soldN + freeN + soldR + freeR + waste;
+
+            const opening = runningBalance;
+            runningBalance += (prod - totalOut);
+            const closing = runningBalance;
+
+            return { ...log, opening, closing, totalOut, soldN, freeN, soldR, freeR, waste };
+        }).reverse(); // Latest first for display
+    }, [filteredProdLogs, filteredSalesLogs]);
+
+    const paginatedBalanceLogs = productionWithBalance.slice((prodPage - 1) * ITEMS_PER_PAGE, prodPage * ITEMS_PER_PAGE);
+
+    const calculateDepreciation = (asset: Asset) => {
         const purchaseDate = new Date(asset.purchaseDate);
         const today = new Date();
         const diffMonths = (today.getFullYear() - purchaseDate.getFullYear()) * 12 + (today.getMonth() - purchaseDate.getMonth());
@@ -194,173 +225,167 @@ export default function Finance() {
     };
 
     const handleExportExcel = async () => {
-        const workbook = new ExcelJS.Workbook();
+        const wb = new ExcelJS.Workbook();
+        wb.creator = 'PoultryMind';
+        wb.created = new Date();
 
-        // --- SHEET 1: BUKU TELUR ---
-        const sheet1 = workbook.addWorksheet('BUKU TELUR');
-        sheet1.mergeCells('A1:L1');
-        sheet1.getCell('A1').value = 'LAPORAN PRODUKSI TELUR (BUKU TELUR)';
-        sheet1.getCell('A1').font = { bold: true, size: 14 };
-        sheet1.getCell('A1').alignment = { horizontal: 'center' };
-        
-        sheet1.getCell('A4').value = 'Populasi';
-        sheet1.getCell('B4').value = currentPopulation;
+        const DARK = 'FF0F172A'; const WHITE = 'FFFFFFFF';
+        const GREEN_BG = 'FF064E3B'; const AMBER_BG = 'FF78350F'; const ROSE_BG = 'FF881337';
+        const LIGHT_GRAY = 'FFF1F5F9'; const LIGHT_GREEN = 'FFD1FAE5'; const LIGHT_ROSE = 'FFFFE4E6';
 
-        const headers1 = ['Tgl', 'Normal', '', '', 'Retak', '', '', 'Pecah/Abnormal', '', 'Total Produksi', '% HDP', 'Ket'];
-        const subHeaders1 = ['', 'Produksi', 'Jual', 'Free', 'Produksi', 'Jual', 'Free', 'Produksi', 'Buang', '', '', ''];
-        
-        sheet1.getRow(6).values = headers1;
-        sheet1.getRow(7).values = subHeaders1;
-        
-        sheet1.mergeCells('A6:A7');
-        sheet1.mergeCells('B6:D6');
-        sheet1.mergeCells('E6:G6');
-        sheet1.mergeCells('H6:I6');
-        sheet1.mergeCells('J6:J7');
-        sheet1.mergeCells('K6:K7');
-        sheet1.mergeCells('L6:L7');
-
-        const cols1 = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
-        cols1.forEach(col => {
-            [6, 7].forEach(r => {
-                const cell = sheet1.getCell(`${col}${r}`);
-                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
-                cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-                cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-            });
-        });
-
-        let rowStart = 8;
-        filteredProdLogs.forEach((row, i) => {
-            const r = rowStart + i;
-            sheet1.getRow(r).values = [
-                new Date(row.date).toLocaleDateString('id-ID'),
-                getNormalKg(row),
-                getSoldByDate(row.date, 'NORMAL'),
-                getFreeSoldByDate(row.date),
-                getRetakKg(row),
-                getSoldByDate(row.date, 'RETAK'),
-                0,
-                row.breakdown[EggCategory.PECAH] || 0,
-                row.discardedEggs || 0,
-                row.totalKg,
-                ((row.eggCount / (currentPopulation || 1)) * 100).toFixed(2),
-                row.breakdown[EggCategory.BM] ? `BM:${row.breakdown[EggCategory.BM]}kg` : ''
-            ];
-            cols1.forEach(col => {
-                sheet1.getCell(`${col}${r}`).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-                sheet1.getCell(`${col}${r}`).alignment = { horizontal: 'center' };
-            });
-        });
-
-        const totalRow = rowStart + filteredProdLogs.length;
-        sheet1.getCell(`A${totalRow}`).value = 'TOTAL';
-        sheet1.getCell(`A${totalRow}`).font = { bold: true };
-        ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'].forEach(col => {
-            sheet1.getCell(`${col}${totalRow}`).value = { formula: `SUM(${col}${rowStart}:${col}${totalRow - 1})` };
-            sheet1.getCell(`${col}${totalRow}`).font = { bold: true };
-            sheet1.getCell(`${col}${totalRow}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
-        });
-
-        // --- SHEET 2: TRANSAKSI (BUKU KAS) ---
-        const sheet2 = workbook.addWorksheet('BUKU KAS');
-        sheet2.getCell('A1').value = 'LAPORAN TRANSAKSI OPERASIONAL (BUKU KAS)';
-        sheet2.getCell('A1').font = { bold: true, size: 14 };
-        
-        sheet2.getRow(3).values = ['No.', 'Keterangan', 'Qty', 'Tipe', 'Masuk (Debit)', 'Keluar (Kredit)', 'Tanggal', 'Akun'];
-        sheet2.getRow(3).eachCell(c => {
-            c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
-            c.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        });
-
-        const allOperasional = houseTransactions.filter(t => t.type !== 'MODAL');
-        let debitTotal = 0;
-        let kreditTotal = 0;
-
-        allOperasional.forEach((row, i) => {
-            const r = 4 + i;
-            const isIncome = row.type === 'INCOME';
-            if (isIncome) debitTotal += row.total;
-            else kreditTotal += row.total;
-
-            sheet2.getRow(r).values = [
-                i + 1, row.description, row.qty, row.type, 
-                isIncome ? row.total : 0, 
-                !isIncome ? row.total : 0, 
-                new Date(row.date).toLocaleDateString('id-ID'), row.account
-            ];
-            sheet2.getCell(`E${r}`).numFmt = '#,##0';
-            sheet2.getCell(`F${r}`).numFmt = '#,##0';
-        });
-        const lastTxRow = 4 + allOperasional.length;
-        sheet2.getCell(`D${lastTxRow}`).value = 'TOTAL';
-        sheet2.getCell(`E${lastTxRow}`).value = debitTotal;
-        sheet2.getCell(`F${lastTxRow}`).value = kreditTotal;
-        sheet2.getCell(`D${lastTxRow}`).font = { bold: true };
-        sheet2.getCell(`E${lastTxRow}`).font = { bold: true };
-        sheet2.getCell(`F${lastTxRow}`).font = { bold: true };
-        sheet2.getCell(`E${lastTxRow}`).numFmt = '#,##0';
-        sheet2.getCell(`F${lastTxRow}`).numFmt = '#,##0';
-
-        // --- SHEET 3: MODAL ---
-        const sheet3 = workbook.addWorksheet('MODAL');
-        sheet3.getCell('A1').value = 'RINCIAN MODAL MASUK';
-        sheet3.getRow(3).values = ['No.', 'Sumber', 'Nominal', 'Tanggal'];
-        modalTransactions.forEach((m, i) => {
-            sheet3.getRow(4 + i).values = [i + 1, m.description, m.total, new Date(m.date).toLocaleDateString('id-ID')];
-        });
-
-        // --- SHEET 4: ASET & PENYUSUTAN ---
-        const sheet4 = workbook.addWorksheet('ASET');
-        sheet4.getCell('A1').value = 'DAFTAR ASET & PENYUSUTAN';
-        sheet4.getCell('A1').font = { bold: true, size: 14 };
-        sheet4.getRow(3).values = ['No.', 'Nama Aset', 'Kategori', 'Tgl Beli', 'Nilai Beli', 'Kondisi', 'Penyusutan', 'Nilai Buku'];
-        sheet4.getRow(3).eachCell(c => {
-            c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F172A' } };
-            c.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-        });
-        houseAssets.forEach((asset, i) => {
-            const dep = calculateDepreciation(asset);
-            const r = 4 + i;
-            sheet4.getRow(r).values = [
-                i + 1, asset.name, asset.category, 
-                new Date(asset.purchaseDate).toLocaleDateString('id-ID'), 
-                asset.purchasePrice, asset.condition, dep, asset.purchasePrice - dep
-            ];
-            sheet4.getCell(`E${r}`).numFmt = '#,##0';
-            sheet4.getCell(`G${r}`).numFmt = '#,##0';
-            sheet4.getCell(`H${r}`).numFmt = '#,##0';
-        });
-        
-        // Add Master Assets from FarmSettings
-        // Add Master Assets from FarmSettings
-
-        let rIndex = 4 + assets.length;
-        const addMasterAsset = (name: string, category: string, value: number, salvageValue: number, years: number) => {
-            const depreciableAmount = Math.max(0, value - salvageValue);
-            // Untuk excel master kita tampilkan beban penyusutan per tahun
-            const depPerYear = years ? depreciableAmount / years : 0;
-            sheet4.getRow(rIndex).values = [
-                rIndex - 3, name, category, '-', value, 'BAIK', depPerYear, value - depPerYear
-            ];
-            sheet4.getCell(`E${rIndex}`).numFmt = '#,##0';
-            sheet4.getCell(`G${rIndex}`).numFmt = '#,##0';
-            sheet4.getCell(`H${rIndex}`).numFmt = '#,##0';
-            rIndex++;
+        const styleHeader = (cell: ExcelJS.Cell, bg = DARK) => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+            cell.font = { bold: true, color: { argb: WHITE }, size: 10 };
+            cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+            cell.border = { top: { style: 'thin', color: { argb: 'FF334155' } }, left: { style: 'thin', color: { argb: 'FF334155' } }, bottom: { style: 'thin', color: { argb: 'FF334155' } }, right: { style: 'thin', color: { argb: 'FF334155' } } };
         };
-        
-        addMasterAsset('Kandang & Bangunan (Master)', 'PROPERTI', farmSettings?.cageValueTotal || 0, farmSettings?.cageSalvageValue || 0, farmSettings?.cageLifeYears || 0);
-        addMasterAsset('Peralatan Farm (Master)', 'ALAT PRODUKSI', farmSettings?.equipmentValueTotal || 0, farmSettings?.equipmentSalvageValue || 0, farmSettings?.equipmentLifeYears || 0);
-        
-        // Depresiasi Aset Biologis (Ayam Pullet)
-        // Beban deplesi per tahun = (Biaya Perolehan - Nilai Afkir) / Umur Produktif
-        addMasterAsset('Ayam Pullet (Master Aset Biologis)', 'FLOCK / BIOLOGIS', farmSettings?.layerValueTotal || 0, farmSettings?.layerSalvageValue || 0, farmSettings?.layerLifeYears || 0);
+        const styleData = (cell: ExcelJS.Cell, even = false) => {
+            cell.fill = even ? { type: 'pattern', pattern: 'solid', fgColor: { argb: LIGHT_GRAY } } : { type: 'pattern', pattern: 'solid', fgColor: { argb: WHITE } };
+            cell.border = { top: { style: 'hair' }, left: { style: 'hair' }, bottom: { style: 'hair' }, right: { style: 'hair' } };
+            cell.alignment = { vertical: 'middle' };
+        };
+        const addSheetTitle = (ws: ExcelJS.Worksheet, title: string, subtitle: string, cols: number) => {
+            ws.mergeCells(`A1:${String.fromCharCode(64 + cols)}1`);
+            const t = ws.getCell('A1'); t.value = title;
+            t.font = { bold: true, size: 14, color: { argb: DARK } };
+            t.alignment = { horizontal: 'center' };
+            t.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } };
+            ws.mergeCells(`A2:${String.fromCharCode(64 + cols)}2`);
+            const s = ws.getCell('A2'); s.value = subtitle;
+            s.font = { size: 9, italic: true, color: { argb: 'FF64748B' } };
+            s.alignment = { horizontal: 'center' };
+            ws.getRow(1).height = 24; ws.getRow(2).height = 16;
+        };
+        const formatIDR = '#,##0';
 
+        // ── SHEET 1: BUKU TELUR ─────────────────────────────────────────
+        const s1 = wb.addWorksheet('BUKU TELUR');
+        s1.columns = [8,12,12,12,12,12,12,12,12,14,10,14].map(w => ({ width: w }));
+        addSheetTitle(s1, 'BUKU PRODUKSI TELUR', `Populasi: ${currentPopulation.toLocaleString()} ekor · Dicetak: ${new Date().toLocaleDateString('id-ID')}`, 12);
+        const h1 = ['Tanggal','Normal','','','Retak','','','Pecah','','Total (butir)','HDP %','Keterangan'];
+        const sh1 = ['','Produksi','Jual','Free','Produksi','Jual','Free','Produksi','Buang','','',''];
+        s1.getRow(4).values = h1; s1.getRow(5).values = sh1;
+        ['A4:A5','B4:D4','E4:G4','H4:I4','J4:J5','K4:K5','L4:L5'].forEach(m => s1.mergeCells(m));
+        ['A','B','C','D','E','F','G','H','I','J','K','L'].forEach(c => { styleHeader(s1.getCell(`${c}4`)); styleHeader(s1.getCell(`${c}5`)); });
+        s1.getRow(4).height = 20; s1.getRow(5).height = 16;
+        filteredProdLogs.forEach((row, i) => {
+            const r = 6 + i; const even = i % 2 === 1;
+            s1.getRow(r).values = [
+                new Date(row.date).toLocaleDateString('id-ID'), getNormalButir(row), getSoldByDate(row.date,'NORMAL', false), getSoldByDate(row.date,'NORMAL', true),
+                getRetakButir(row), getSoldByDate(row.date,'RETAK', false), getSoldByDate(row.date,'RETAK', true), row.breakdown[EggCategory.PECAH]||0,
+                row.discardedEggs||0, row.totalButir ?? (row as any).totalKg ?? 0, +((row.eggCount/(currentPopulation||1))*100).toFixed(2), ''
+            ];
+            ['A','B','C','D','E','F','G','H','I','J','K','L'].forEach(c => styleData(s1.getCell(`${c}${r}`), even));
+            s1.getRow(r).height = 16;
+        });
+        const tr1 = 6 + filteredProdLogs.length;
+        s1.getRow(tr1).values = ['TOTAL',...['B','C','D','E','F','G','H','I','J'].map(c => ({formula:`SUM(${c}6:${c}${tr1-1})`})),'',''];
+        ['A','B','C','D','E','F','G','H','I','J'].forEach(c => {
+            const cell = s1.getCell(`${c}${tr1}`);
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+            cell.font = { bold: true };
+        });
 
-        const buffer = await workbook.xlsx.writeBuffer();
-        saveAs(new Blob([buffer]), 'Laporan_Keuangan_Eggly.xlsx');
+        // Helper: build a transaction sheet
+        const buildTxSheet = (name: string, title: string, subtitle: string, txList: typeof houseTransactions, headerBg: string) => {
+            const ws = wb.addWorksheet(name);
+            ws.columns = [6,14,32,14,18,18,14,20].map(w => ({ width: w }));
+            addSheetTitle(ws, title, subtitle, 8);
+            const headers = ['No','Tanggal Transaksi','Barang / Jasa','Qty','Harga Satuan (Rp)','Total Harga (Rp)','Tgl Bayar','Nama Request'];
+            ws.getRow(4).values = headers;
+            headers.forEach((_, ci) => styleHeader(ws.getCell(4, ci + 1), headerBg));
+            ws.getRow(4).height = 20;
+            let runTotal = 0;
+            txList.forEach((t, i) => {
+                const r = 5 + i; const even = i % 2 === 1;
+                runTotal += t.total;
+                ws.getRow(r).values = [i+1, new Date(t.date).toLocaleDateString('id-ID'), t.description, t.qty, t.price||0, t.total, new Date(t.date).toLocaleDateString('id-ID'), t.account||'-'];
+                [1,2,3,4,5,6,7,8].forEach(ci => styleData(ws.getCell(r, ci), even));
+                ws.getCell(r, 5).numFmt = formatIDR; ws.getCell(r, 6).numFmt = formatIDR;
+                ws.getCell(r, 1).alignment = { horizontal: 'center' };
+                ws.getRow(r).height = 16;
+            });
+            const lr = 5 + txList.length;
+            ws.mergeCells(`A${lr}:E${lr}`);
+            ws.getCell(`A${lr}`).value = `TOTAL ${name.toUpperCase()}`;
+            ws.getCell(`A${lr}`).font = { bold: true, size: 10 };
+            ws.getCell(`A${lr}`).alignment = { horizontal: 'right' };
+            ws.getCell(`F${lr}`).value = runTotal;
+            ws.getCell(`F${lr}`).numFmt = formatIDR;
+            ws.getCell(`F${lr}`).font = { bold: true, size: 11 };
+            [ws.getCell(`A${lr}`), ws.getCell(`F${lr}`), ws.getCell(`G${lr}`), ws.getCell(`H${lr}`)].forEach(c => {
+                c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+            });
+            return runTotal;
+        };
+
+        const totalPenjualan = buildTxSheet('PENJUALAN TELUR','BUKU PENJUALAN TELUR',`Jurnal Pendapatan · ${new Date().toLocaleDateString('id-ID')}`, salesTransactions, GREEN_BG);
+        const totalBahan = buildTxSheet('PENGELUARAN BAHAN','BUKU PENGELUARAN BAHAN',`Pembelian Pakan, Obat & Bahan Baku · ${new Date().toLocaleDateString('id-ID')}`, bahanTransactions, AMBER_BG);
+        const totalOperasional = buildTxSheet('PENGELUARAN OPERASIONAL','BUKU PENGELUARAN OPERASIONAL',`Gaji, Aset & Biaya Tetap · ${new Date().toLocaleDateString('id-ID')}`, operasionalTransactions, ROSE_BG);
+
+        // ── SHEET: MODAL MASUK ──────────────────────────────────────────
+        const sm = wb.addWorksheet('MODAL MASUK');
+        sm.columns = [6,30,20,14].map(w => ({ width: w }));
+        addSheetTitle(sm, 'RINCIAN MODAL MASUK', `Total Modal: Rp ${totalModalAwal.toLocaleString('id-ID')}`, 4);
+        sm.getRow(4).values = ['No','Keterangan','Nominal (Rp)','Tanggal'];
+        [1,2,3,4].forEach(ci => styleHeader(sm.getCell(4, ci), DARK));
+        sm.getRow(4).height = 20;
+        modalTransactions.forEach((m, i) => {
+            const r = 5 + i;
+            sm.getRow(r).values = [i+1, m.description, m.total, new Date(m.date).toLocaleDateString('id-ID')];
+            [1,2,3,4].forEach(ci => styleData(sm.getCell(r, ci), i % 2 === 1));
+            sm.getCell(r, 3).numFmt = formatIDR;
+        });
+
+        // ── SHEET: LAPORAN LABA RUGI ────────────────────────────────────
+        const sl = wb.addWorksheet('LABA RUGI');
+        sl.columns = [35,22].map(w => ({ width: w }));
+        addSheetTitle(sl, 'LAPORAN LABA RUGI', `Periode s/d ${new Date().toLocaleDateString('id-ID')} · ${activeHouse?.name || 'Semua Kandang'}`, 2);
+        const labaData: [string, number, boolean][] = [
+            ['PENDAPATAN','',false] as any,
+            ['  Penjualan Telur', totalPenjualan, false],
+            ['  Lain-lain (Pendapatan Lainnya)', totalIncome - totalPenjualan > 0 ? totalIncome - totalPenjualan : 0, false],
+            ['TOTAL PENDAPATAN', totalIncome, true],
+            ['','',false] as any,
+            ['BEBAN & PENGELUARAN','',false] as any,
+            ['  Beban Bahan & Stok', totalBahan, false],
+            ['  Beban Operasional & Gaji', totalOperasional, false],
+            ['TOTAL BEBAN', totalBahan + totalOperasional, true],
+            ['','',false] as any,
+            ['LABA / (RUGI) BERSIH', netProfit, true],
+            ['Modal Awal (Ekuitas)', totalModalAwal, false],
+            ['MODAL AKHIR (EKUITAS)', currentCapital, true],
+        ];
+        labaData.forEach(([label, value, isBold], i) => {
+            const r = 4 + i;
+            const la = sl.getCell(r, 1); const va = sl.getCell(r, 2);
+            la.value = label; va.value = typeof value === 'number' ? value : '';
+            if (typeof value === 'number') va.numFmt = formatIDR;
+            if (isBold) { la.font = { bold: true, size: 10 }; va.font = { bold: true, size: 10 }; }
+            if (label === 'LABA / (RUGI) BERSIH') {
+                [la, va].forEach(c => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: netProfit >= 0 ? LIGHT_GREEN : LIGHT_ROSE } }; c.font = { bold: true, size: 12 }; });
+            }
+            sl.getRow(r).height = 18;
+        });
+
+        // ── SHEET 5: ASET & PENYUSUTAN ─────────────────────────────────
+        const s4 = wb.addWorksheet('ASET');
+        s4.columns = [6,28,20,14,18,12,18,18].map(w => ({ width: w }));
+        addSheetTitle(s4, 'DAFTAR ASET & PENYUSUTAN', `Metode: Garis Lurus · ${new Date().toLocaleDateString('id-ID')}`, 8);
+        s4.getRow(4).values = ['No','Nama Aset','Kategori','Tgl Perolehan','Nilai Beli (Rp)','Kondisi','Akum. Penyusutan (Rp)','Nilai Buku (Rp)'];
+        [1,2,3,4,5,6,7,8].forEach(ci => styleHeader(s4.getCell(4, ci), DARK));
+        s4.getRow(4).height = 22;
+        houseAssets.forEach((asset, i) => {
+            const dep = calculateDepreciation(asset); const r = 5 + i;
+            s4.getRow(r).values = [i+1, asset.name, asset.category, new Date(asset.purchaseDate).toLocaleDateString('id-ID'), asset.purchasePrice, asset.condition, dep, asset.purchasePrice - dep];
+            [1,2,3,4,5,6,7,8].forEach(ci => styleData(s4.getCell(r, ci), i%2===1));
+            [5,7,8].forEach(ci => { s4.getCell(r, ci).numFmt = formatIDR; });
+        });
+
+        const buffer = await wb.xlsx.writeBuffer();
+        saveAs(new Blob([buffer]), `Laporan_Keuangan_${activeHouse?.name || 'Farm'}_${new Date().toISOString().slice(0,10)}.xlsx`);
     };
+
 
     const handleAddModalSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -379,10 +404,6 @@ export default function Finance() {
             setIsModalAwalOpen(false);
         }
     };
-
-    // Pagination Helpers
-    const paginatedProdLogs = filteredProdLogs.slice((prodPage - 1) * ITEMS_PER_PAGE, prodPage * ITEMS_PER_PAGE);
-    const paginatedTxs = transactions.filter(t => t.type !== 'MODAL').slice((txPage - 1) * ITEMS_PER_PAGE, txPage * ITEMS_PER_PAGE);
 
     return (
         <div className="space-y-8 pb-20">
@@ -462,123 +483,270 @@ export default function Finance() {
                                     <thead>
                                         <tr className="bg-slate-900 text-white text-[9px] font-black uppercase tracking-widest border-b border-slate-700">
                                             <th rowSpan={2} className="px-3 py-3 border border-slate-700">Tgl</th>
-                                            <th colSpan={3} className="px-2 py-3 border border-slate-700">Normal</th>
-                                            <th colSpan={3} className="px-2 py-3 border border-slate-700">Retak</th>
-                                            <th colSpan={2} className="px-2 py-3 border border-slate-700">Pecah/Abnormal</th>
-                                            <th rowSpan={2} className="px-3 py-3 border border-slate-700">Total Produksi</th>
-                                            <th rowSpan={2} className="px-3 py-3 border border-slate-700">% HDP</th>
+                                            <th rowSpan={2} className="px-3 py-3 border border-slate-700 bg-slate-800">Stok Awal</th>
+                                            <th colSpan={3} className="px-2 py-3 border border-slate-700 bg-emerald-900/50">Masuk (Produksi)</th>
+                                            <th colSpan={2} className="px-2 py-3 border border-slate-700 bg-amber-900/50">Keluar</th>
+                                            <th rowSpan={2} className="px-3 py-3 border border-slate-700 bg-slate-800 text-emerald-400">Stok Akhir</th>
+                                            <th rowSpan={2} className="px-3 py-3 border border-slate-700 italic">HDP</th>
                                         </tr>
                                         <tr className="bg-slate-800 text-slate-300 text-[8px] font-bold uppercase tracking-wider">
-                                            <th className="px-2 py-2 border border-slate-700">Prod</th>
-                                            <th className="px-2 py-2 border border-slate-700">Jual</th>
-                                            <th className="px-2 py-2 border border-slate-700">Free</th>
-                                            <th className="px-2 py-2 border border-slate-700">Prod</th>
-                                            <th className="px-2 py-2 border border-slate-700">Jual</th>
-                                            <th className="px-2 py-2 border border-slate-700">Free</th>
-                                            <th className="px-2 py-2 border border-slate-700">Prod</th>
+                                            <th className="px-2 py-2 border border-slate-700">Normal</th>
+                                            <th className="px-2 py-2 border border-slate-700">Retak</th>
+                                            <th className="px-2 py-2 border border-slate-700">Pecah</th>
+                                            <th className="px-2 py-2 border border-slate-700">Jual/Free</th>
                                             <th className="px-2 py-2 border border-slate-700">Buang</th>
                                         </tr>
                                     </thead>
                                      <tbody className="text-[10px] text-slate-700 font-medium">
-                                        {paginatedProdLogs.map((row, idx) => (
-                                            <tr key={idx} className="hover:bg-slate-50 border-b border-slate-100">
-                                                <td className="px-3 py-3 font-bold">{new Date(row.date).toLocaleDateString('id-ID')}</td>
-                                                <td className="px-2 py-3">{getNormalKg(row).toFixed(2)}</td>
-                                                <td className="px-2 py-3 text-emerald-600 font-bold">{getSoldByDate(row.date, 'NORMAL') || '-'}</td>
-                                                <td className="px-2 py-3 text-blue-600">{getFreeSoldByDate(row.date) || '-'}</td>
-                                                <td className="px-2 py-3 text-amber-600 font-bold">{getRetakKg(row).toFixed(2)}</td>
-                                                <td className="px-2 py-3">{getSoldByDate(row.date, 'RETAK') || '-'}</td>
-                                                <td className="px-2 py-3">-</td>
-                                                <td className="px-2 py-3 text-rose-600 font-bold">{(row.breakdown[EggCategory.PECAH] || 0).toFixed(2)}</td>
-                                                <td className="px-2 py-3">{row.discardedEggs || '-'}</td>
-                                                <td className="px-3 py-3 font-black text-emerald-600">{row.totalKg.toFixed(2)} kg</td>
-                                                <td className="px-3 py-3 font-bold">{((row.eggCount / (currentPopulation || 1)) * 100).toFixed(1)}%</td>
+                                        {paginatedBalanceLogs.map((row, idx) => (
+                                            <tr key={idx} className="hover:bg-slate-50 border-b border-slate-100 transition-colors">
+                                                <td className="px-3 py-3 font-bold bg-slate-50/50">{new Date(row.date).toLocaleDateString('id-ID')}</td>
+                                                <td className="px-3 py-3 font-mono text-slate-400">{row.opening.toLocaleString()}</td>
+                                                
+                                                {/* MASUK */}
+                                                <td className="px-2 py-3 font-bold text-emerald-600">{getNormalButir(row).toLocaleString()}</td>
+                                                <td className="px-2 py-3 text-emerald-500">{(row.breakdown[EggCategory.RETAK] || 0).toLocaleString()}</td>
+                                                <td className="px-2 py-3 text-emerald-400">{(row.breakdown[EggCategory.PECAH] || 0).toLocaleString()}</td>
+                                                
+                                                {/* KELUAR */}
+                                                <td className="px-2 py-3 text-amber-600 font-bold">{(row.soldN + row.soldR + row.freeN + row.freeR).toLocaleString()}</td>
+                                                <td className="px-2 py-3 text-rose-400">{row.waste || '-'}</td>
+                                                
+                                                <td className="px-3 py-3 font-black text-slate-900 bg-emerald-50/30">{row.closing.toLocaleString()}</td>
+                                                <td className="px-3 py-3 font-bold text-slate-400 italic">{((row.eggCount / (currentPopulation || 1)) * 100).toFixed(1)}%</td>
                                             </tr>
                                         ))}
                                     </tbody>
                                     <tfoot className="bg-slate-50 font-black text-[10px] uppercase">
                                         <tr>
                                             <td className="px-3 py-4">TOTAL</td>
-                                            <td className="px-2 py-4">{totalNormal.toFixed(2)}</td>
-                                            <td colSpan={2}></td>
-                                            <td className="px-2 py-4 text-amber-600">{totalRetak.toFixed(2)}</td>
-                                            <td colSpan={2}></td>
-                                            <td className="px-2 py-4 text-rose-600">{totalPecah.toFixed(2)}</td>
                                             <td></td>
-                                            <td className="px-3 py-4 text-emerald-600 italic">{totalProduction.toFixed(2)} kg</td>
+                                            <td className="px-2 py-4 text-emerald-600 font-bold">{totalNormal.toLocaleString()}</td>
+                                            <td className="px-2 py-4">{totalRetak.toLocaleString()}</td>
+                                            <td className="px-2 py-4">{totalPecah.toLocaleString()}</td>
+                                            <td className="px-2 py-4 text-amber-600">{(totalNormalSold + totalRetakSold + totalNormalFree + totalRetakFree).toLocaleString()}</td>
+                                            <td className="px-2 py-4 text-rose-400">{filteredProdLogs.reduce((a,b)=>a+(b.discardedEggs||0),0).toLocaleString()}</td>
+                                            <td className="px-3 py-4 text-slate-900 bg-emerald-50/50 italic">
+                                                {productionWithBalance.length > 0 ? productionWithBalance[0].closing.toLocaleString() : 0}
+                                            </td>
                                             <td></td>
                                         </tr>
                                     </tfoot>
                                  </table>
                             </div>
                             <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
-                                <span className="text-[10px] font-bold text-slate-500 uppercase">Page {prodPage} of {Math.ceil(filteredProdLogs.length / ITEMS_PER_PAGE) || 1}</span>
+                                <span className="text-[10px] font-bold text-slate-500 uppercase">Page {prodPage} of {Math.ceil(productionWithBalance.length / ITEMS_PER_PAGE) || 1}</span>
                                 <div className="flex space-x-2">
                                     <button onClick={() => setProdPage(Math.max(1, prodPage - 1))} disabled={prodPage === 1} className="p-1 bg-white border border-slate-200 rounded-sm disabled:opacity-50"><ChevronLeft size={16} /></button>
-                                    <button onClick={() => setProdPage(Math.min(Math.ceil(filteredProdLogs.length / ITEMS_PER_PAGE), prodPage + 1))} disabled={prodPage >= Math.ceil(filteredProdLogs.length / ITEMS_PER_PAGE)} className="p-1 bg-white border border-slate-200 rounded-sm disabled:opacity-50"><ChevronRight size={16} /></button>
+                                    <button onClick={() => setProdPage(Math.min(Math.ceil(productionWithBalance.length / ITEMS_PER_PAGE), prodPage + 1))} disabled={prodPage >= Math.ceil(productionWithBalance.length / ITEMS_PER_PAGE)} className="p-1 bg-white border border-slate-200 rounded-sm disabled:opacity-50"><ChevronRight size={16} /></button>
                                 </div>
                             </div>
                         </div>
                     )}
 
                     {activeTab === 'BUKU_TRANSAKSI' && (
-                        <div className="space-y-6">
+                        <div className="space-y-8">
+
+                            {/* SECTION 1: PENJUALAN TELUR */}
                             <div className="bg-white border border-slate-200 overflow-hidden shadow-sm">
-                                <div className="p-8 border-b border-slate-100 bg-slate-50/30">
-                                    <h3 className="font-bold text-lg text-slate-900 uppercase tracking-tight italic">Buku Kas & Transaksi</h3>
+                                <div className="px-8 py-5 border-b border-slate-100 bg-emerald-50 flex items-center justify-between">
+                                    <div>
+                                        <h3 className="font-bold text-base text-emerald-800 uppercase tracking-tight italic">Buku Penjualan Telur</h3>
+                                        <p className="text-[9px] text-emerald-600 font-bold uppercase tracking-widest mt-0.5">Jurnal Pendapatan · {salesTransactions.length} transaksi</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[9px] text-emerald-600 font-bold uppercase tracking-widest">Total Pendapatan</p>
+                                        <p className="text-lg font-black text-emerald-700">{formatCurrency(salesTransactions.reduce((a,t) => a+t.total, 0))}</p>
+                                    </div>
                                 </div>
-                                <div className="p-4 grid grid-cols-1 xl:grid-cols-4 gap-6">
-                                    <div className="xl:col-span-3 overflow-x-auto">
-                                        <table className="w-full text-left border border-slate-200">
-                                            <thead>
-                                                <tr className="bg-slate-900 text-white text-[9px] font-black uppercase tracking-widest">
-                                                    <th className="px-3 py-3">Keterangan</th>
-                                                    <th className="px-3 py-3 text-right">Total</th>
-                                                    <th className="px-3 py-3">Tanggal</th>
-                                                    <th className="px-3 py-3">Tipe</th>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="bg-slate-900 text-white text-[9px] font-black uppercase tracking-widest">
+                                                <th className="px-3 py-3 w-8">No</th>
+                                                <th className="px-3 py-3">Tanggal Transaksi</th>
+                                                <th className="px-3 py-3">Barang / Jasa</th>
+                                                <th className="px-3 py-3 text-center">Qty</th>
+                                                <th className="px-3 py-3 text-right">Harga Satuan</th>
+                                                <th className="px-3 py-3 text-right">Total Harga</th>
+                                                <th className="px-3 py-3">Tgl Bayar</th>
+                                                <th className="px-3 py-3">Nama Pembeli</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="text-[10px] divide-y divide-slate-50">
+                                            {salesTransactions.length === 0 ? (
+                                                <tr><td colSpan={8} className="px-4 py-6 text-center text-slate-400 font-bold uppercase text-[9px]">Belum ada data penjualan telur</td></tr>
+                                            ) : salesTransactions.map((t, idx) => (
+                                                <tr key={t.id} className="hover:bg-emerald-50/30 transition-colors">
+                                                    <td className="px-3 py-3 text-slate-400 font-bold">{idx + 1}</td>
+                                                    <td className="px-3 py-3 font-bold text-slate-700">{new Date(t.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                                                    <td className="px-3 py-3 font-bold text-slate-800">{t.description}</td>
+                                                    <td className="px-3 py-3 text-center font-mono font-bold text-slate-700">{t.qty}</td>
+                                                    <td className="px-3 py-3 text-right font-mono text-slate-600">{t.price > 0 ? formatCurrency(t.price) : '-'}</td>
+                                                    <td className="px-3 py-3 text-right font-mono font-black text-emerald-700">{formatCurrency(t.total)}</td>
+                                                    <td className="px-3 py-3 text-slate-500">{new Date(t.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                                                    <td className="px-3 py-3 text-slate-500">{t.account}</td>
                                                 </tr>
-                                            </thead>
-                                             <tbody className="text-[10px]">
-                                                {paginatedTxs.map((t, idx) => (
-                                                    <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
-                                                        <td className="px-3 py-3 font-bold">{t.description}</td>
-                                                        <td className={cn("px-3 py-3 text-right font-mono font-black", t.type === 'INCOME' ? "text-emerald-600" : "text-rose-600")}>
-                                                            {t.type === 'INCOME' ? '+' : '-'} {formatCurrency(t.total)}
-                                                        </td>
-                                                        <td className="px-3 py-3">{new Date(t.date).toLocaleDateString('id-ID')}</td>
-                                                        <td className="px-3 py-3">
-                                                            <span className={cn("px-2 py-0.5 rounded-full text-[8px] font-black uppercase", t.type === 'INCOME' ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700")}>
-                                                                {t.type}
-                                                            </span>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                         </table>
-                                    </div>
-                                    <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50 xl:col-span-3">
-                                        <span className="text-[10px] font-bold text-slate-500 uppercase">Page {txPage} of {Math.ceil(transactions.filter(t => t.type !== 'MODAL').length / ITEMS_PER_PAGE) || 1}</span>
-                                        <div className="flex space-x-2">
-                                            <button onClick={() => setTxPage(Math.max(1, txPage - 1))} disabled={txPage === 1} className="p-1 bg-white border border-slate-200 rounded-sm disabled:opacity-50"><ChevronLeft size={16} /></button>
-                                            <button onClick={() => setTxPage(Math.min(Math.ceil(transactions.filter(t => t.type !== 'MODAL').length / ITEMS_PER_PAGE), txPage + 1))} disabled={txPage >= Math.ceil(transactions.filter(t => t.type !== 'MODAL').length / ITEMS_PER_PAGE)} className="p-1 bg-white border border-slate-200 rounded-sm disabled:opacity-50"><ChevronRight size={16} /></button>
-                                        </div>
-                                    </div>
-                                    <div className="xl:col-span-1 bg-slate-50 p-4 border border-slate-200">
-                                        <h4 className="text-[10px] font-black uppercase text-slate-400 mb-3">Modal Masuk</h4>
-                                        <div className="space-y-3">
-                                            {modalTransactions.map((m, i) => (
-                                                <div key={i} className="flex justify-between items-center text-[11px] font-bold group">
-                                                    <span className="text-slate-500">{m.description}</span>
-                                                    <div className="flex items-center space-x-2">
-                                                        <span className="text-emerald-600">+{formatCurrency(m.total)}</span>
-                                                        <button onClick={() => { setEditingModal(m); setIsModalAwalOpen(true); }} className="text-slate-400 hover:text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity"><Edit2 size={12} /></button>
-                                                    </div>
-                                                </div>
                                             ))}
-                                        </div>
-                                    </div>
+                                        </tbody>
+                                        {salesTransactions.length > 0 && (
+                                            <tfoot className="bg-emerald-50 border-t-2 border-emerald-200">
+                                                <tr>
+                                                    <td colSpan={5} className="px-3 py-3 text-[9px] font-black uppercase tracking-widest text-emerald-700">Total Penjualan Telur</td>
+                                                    <td className="px-3 py-3 text-right font-black text-emerald-700 font-mono">{formatCurrency(salesTransactions.reduce((a,t) => a+t.total, 0))}</td>
+                                                    <td colSpan={2}></td>
+                                                </tr>
+                                            </tfoot>
+                                        )}
+                                    </table>
                                 </div>
                             </div>
+
+                            {/* SECTION 2: PENGELUARAN BAHAN */}
+                            <div className="bg-white border border-slate-200 overflow-hidden shadow-sm">
+                                <div className="px-8 py-5 border-b border-slate-100 bg-amber-50 flex items-center justify-between">
+                                    <div>
+                                        <h3 className="font-bold text-base text-amber-800 uppercase tracking-tight italic">Pengeluaran Bahan & Stok</h3>
+                                        <p className="text-[9px] text-amber-600 font-bold uppercase tracking-widest mt-0.5">Pembelian Pakan, Obat, Bahan Baku · {bahanTransactions.length} transaksi</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[9px] text-amber-600 font-bold uppercase tracking-widest">Total Pengeluaran</p>
+                                        <p className="text-lg font-black text-amber-700">{formatCurrency(bahanTransactions.reduce((a,t) => a+t.total, 0))}</p>
+                                    </div>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="bg-slate-900 text-white text-[9px] font-black uppercase tracking-widest">
+                                                <th className="px-3 py-3 w-8">No</th>
+                                                <th className="px-3 py-3">Tanggal Transaksi</th>
+                                                <th className="px-3 py-3">Barang / Jasa</th>
+                                                <th className="px-3 py-3 text-center">Qty</th>
+                                                <th className="px-3 py-3 text-right">Harga Satuan</th>
+                                                <th className="px-3 py-3 text-right">Total Harga</th>
+                                                <th className="px-3 py-3">Tgl Bayar</th>
+                                                <th className="px-3 py-3">Nama Request</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="text-[10px] divide-y divide-slate-50">
+                                            {bahanTransactions.length === 0 ? (
+                                                <tr><td colSpan={8} className="px-4 py-6 text-center text-slate-400 font-bold uppercase text-[9px]">Belum ada pengeluaran bahan</td></tr>
+                                            ) : bahanTransactions.map((t, idx) => (
+                                                <tr key={t.id} className="hover:bg-amber-50/30 transition-colors">
+                                                    <td className="px-3 py-3 text-slate-400 font-bold">{idx + 1}</td>
+                                                    <td className="px-3 py-3 font-bold text-slate-700">{new Date(t.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                                                    <td className="px-3 py-3 font-bold text-slate-800">{t.description}</td>
+                                                    <td className="px-3 py-3 text-center font-mono font-bold text-slate-700">{t.qty}</td>
+                                                    <td className="px-3 py-3 text-right font-mono text-slate-600">{t.price > 0 ? formatCurrency(t.price) : '-'}</td>
+                                                    <td className="px-3 py-3 text-right font-mono font-black text-rose-700">{formatCurrency(t.total)}</td>
+                                                    <td className="px-3 py-3 text-slate-500">{new Date(t.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                                                    <td className="px-3 py-3 text-slate-500">{t.account}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        {bahanTransactions.length > 0 && (
+                                            <tfoot className="bg-amber-50 border-t-2 border-amber-200">
+                                                <tr>
+                                                    <td colSpan={5} className="px-3 py-3 text-[9px] font-black uppercase tracking-widest text-amber-700">Total Pengeluaran Bahan</td>
+                                                    <td className="px-3 py-3 text-right font-black text-rose-700 font-mono">{formatCurrency(bahanTransactions.reduce((a,t) => a+t.total, 0))}</td>
+                                                    <td colSpan={2}></td>
+                                                </tr>
+                                            </tfoot>
+                                        )}
+                                    </table>
+                                </div>
+                            </div>
+
+                            {/* SECTION 3: PENGELUARAN OPERASIONAL */}
+                            <div className="bg-white border border-slate-200 overflow-hidden shadow-sm">
+                                <div className="px-8 py-5 border-b border-slate-100 bg-rose-50 flex items-center justify-between">
+                                    <div>
+                                        <h3 className="font-bold text-base text-rose-800 uppercase tracking-tight italic">Pengeluaran Operasional</h3>
+                                        <p className="text-[9px] text-rose-600 font-bold uppercase tracking-widest mt-0.5">Gaji, Aset, Biaya Operasional · {operasionalTransactions.length} transaksi</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[9px] text-rose-600 font-bold uppercase tracking-widest">Total Pengeluaran</p>
+                                        <p className="text-lg font-black text-rose-700">{formatCurrency(operasionalTransactions.reduce((a,t) => a+t.total, 0))}</p>
+                                    </div>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="bg-slate-900 text-white text-[9px] font-black uppercase tracking-widest">
+                                                <th className="px-3 py-3 w-8">No</th>
+                                                <th className="px-3 py-3">Tanggal Transaksi</th>
+                                                <th className="px-3 py-3">Barang / Jasa</th>
+                                                <th className="px-3 py-3 text-center">Qty</th>
+                                                <th className="px-3 py-3 text-right">Harga Satuan</th>
+                                                <th className="px-3 py-3 text-right">Total Harga</th>
+                                                <th className="px-3 py-3">Tgl Bayar</th>
+                                                <th className="px-3 py-3">Nama Request</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="text-[10px] divide-y divide-slate-50">
+                                            {operasionalTransactions.length === 0 ? (
+                                                <tr><td colSpan={8} className="px-4 py-6 text-center text-slate-400 font-bold uppercase text-[9px]">Belum ada pengeluaran operasional</td></tr>
+                                            ) : operasionalTransactions.map((t, idx) => (
+                                                <tr key={t.id} className="hover:bg-rose-50/30 transition-colors">
+                                                    <td className="px-3 py-3 text-slate-400 font-bold">{idx + 1}</td>
+                                                    <td className="px-3 py-3 font-bold text-slate-700">{new Date(t.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                                                    <td className="px-3 py-3 font-bold text-slate-800">{t.description}</td>
+                                                    <td className="px-3 py-3 text-center font-mono font-bold text-slate-700">{t.qty}</td>
+                                                    <td className="px-3 py-3 text-right font-mono text-slate-600">{t.price > 0 ? formatCurrency(t.price) : '-'}</td>
+                                                    <td className="px-3 py-3 text-right font-mono font-black text-rose-700">{formatCurrency(t.total)}</td>
+                                                    <td className="px-3 py-3 text-slate-500">{new Date(t.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                                                    <td className="px-3 py-3 text-slate-500">{t.account}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        {operasionalTransactions.length > 0 && (
+                                            <tfoot className="bg-rose-50 border-t-2 border-rose-200">
+                                                <tr>
+                                                    <td colSpan={5} className="px-3 py-3 text-[9px] font-black uppercase tracking-widest text-rose-700">Total Operasional</td>
+                                                    <td className="px-3 py-3 text-right font-black text-rose-700 font-mono">{formatCurrency(operasionalTransactions.reduce((a,t) => a+t.total, 0))}</td>
+                                                    <td colSpan={2}></td>
+                                                </tr>
+                                            </tfoot>
+                                        )}
+                                    </table>
+                                </div>
+                            </div>
+
+                            {/* SUMMARY ROW */}
+                            <div className="grid grid-cols-3 gap-4">
+                                <div className="bg-emerald-900 text-white p-5">
+                                    <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400 mb-1">Total Pendapatan</p>
+                                    <p className="text-xl font-black text-emerald-300">{formatCurrency(salesTransactions.reduce((a,t) => a+t.total, 0))}</p>
+                                </div>
+                                <div className="bg-rose-900 text-white p-5">
+                                    <p className="text-[9px] font-bold uppercase tracking-widest text-rose-400 mb-1">Total Pengeluaran</p>
+                                    <p className="text-xl font-black text-rose-300">{formatCurrency([...bahanTransactions, ...operasionalTransactions].reduce((a,t) => a+t.total, 0))}</p>
+                                </div>
+                                <div className={cn("p-5 text-white", netProfit >= 0 ? 'bg-slate-900' : 'bg-rose-950')}>
+                                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">Laba / Rugi Bersih</p>
+                                    <p className={cn("text-xl font-black", netProfit >= 0 ? 'text-amber-400' : 'text-rose-400')}>{netProfit >= 0 ? '+' : ''}{formatCurrency(netProfit)}</p>
+                                </div>
+                            </div>
+
+                            {/* MODAL MASUK */}
+                            {modalTransactions.length > 0 && (
+                                <div className="bg-white border border-slate-200 overflow-hidden shadow-sm">
+                                    <div className="px-8 py-4 border-b border-slate-100 bg-slate-50">
+                                        <h3 className="font-bold text-sm text-slate-700 uppercase tracking-tight italic">Modal Masuk</h3>
+                                    </div>
+                                    <div className="p-4 space-y-2">
+                                        {modalTransactions.map((m, i) => (
+                                            <div key={i} className="flex justify-between items-center p-3 bg-slate-50 border border-slate-100 group">
+                                                <span className="text-[11px] font-bold text-slate-600">{m.description} · {new Date(m.date).toLocaleDateString('id-ID')}</span>
+                                                <div className="flex items-center space-x-2">
+                                                    <span className="text-emerald-600 font-black text-sm">{formatCurrency(m.total)}</span>
+                                                    <button onClick={() => { setEditingModal(m); setIsModalAwalOpen(true); }} className="text-slate-400 hover:text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity"><Edit2 size={12} /></button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 

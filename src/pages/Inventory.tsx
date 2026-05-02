@@ -477,7 +477,7 @@ export default function Inventory() {
                             {(() => {
                                 const houseLogs = productionLogs.filter(p => p.houseId === activeHouse?.id);
                                 const totalFeed = houseLogs.reduce((a, b) => a + b.feedConsumed, 0);
-                                const totalEggs = houseLogs.reduce((a, b) => a + b.totalKg, 0);
+                                const totalEggs = houseLogs.reduce((a, b) => a + (b.totalButir ?? (b as any).totalKg ?? 0), 0);
                                 return totalEggs > 0 ? (totalFeed / totalEggs).toFixed(2) : '0.00';
                             })()}
                         </p>
@@ -551,7 +551,7 @@ export default function Inventory() {
             {eggStockItems.filter(i => i.quantity > 0).map(item => (
               <div key={item.id} className="bg-amber-50 border border-amber-200 p-4 shadow-sm">
                 <p className="text-[9px] font-black uppercase tracking-widest text-amber-600">{item.eggCategory || item.name}</p>
-                <p className="text-3xl font-black italic text-slate-900 mt-1">{item.quantity.toFixed(1)}<span className="text-sm font-bold text-slate-400 ml-1">kg</span></p>
+                <p className="text-3xl font-black italic text-slate-900 mt-1">{item.quantity.toLocaleString()}<span className="text-sm font-bold text-slate-400 ml-1">butir</span></p>
               </div>
             ))}
           </div>

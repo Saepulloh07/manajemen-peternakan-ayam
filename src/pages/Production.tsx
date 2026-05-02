@@ -86,15 +86,15 @@ export default function Production() {
   const handleBreakdownChange = (cat: string, val: number) =>
     setBreakdown(prev => ({ ...prev, [cat]: val }));
 
-  const totalBreakdownKg = useMemo(() =>
+  const totalBreakdownButir = useMemo(() =>
     Object.values(breakdown).reduce((a: number, b: unknown) => a + (b as number), 0), [breakdown]);
 
   // Live FCR
   const currentFCR = useMemo(() => {
-    if (totalBreakdownKg > 0 && feedConsumed > 0)
-      return (feedConsumed / totalBreakdownKg).toFixed(2);
+    if (totalBreakdownButir > 0 && feedConsumed > 0)
+      return (feedConsumed / totalBreakdownButir).toFixed(2);
     return '0.00';
-  }, [feedConsumed, totalBreakdownKg]);
+  }, [feedConsumed, totalBreakdownButir]);
 
   // HDP calculation
   const hdp = useMemo(() => {
@@ -114,8 +114,8 @@ export default function Production() {
   }, [feedConsumed, activeBatch]);
 
   const handleSave = () => {
-    if (!eggCount || !feedConsumed || totalBreakdownKg === 0) {
-      Swal.fire({ title: 'Data Tidak Lengkap', text: 'Isi total produksi, pakan, dan klasifikasi berat.', icon: 'warning', confirmButtonColor: '#0f172a' });
+    if (!eggCount || !feedConsumed || totalBreakdownButir === 0) {
+      Swal.fire({ title: 'Data Tidak Lengkap', text: 'Isi total produksi, pakan, dan klasifikasi telur.', icon: 'warning', confirmButtonColor: '#0f172a' });
       return;
     }
     const effectiveFeedId = feedInventoryItemId || feedItems[0]?.id || '';
@@ -131,7 +131,7 @@ export default function Production() {
         <div class="text-left mt-4 text-sm space-y-1">
           <p>Umur Ayam: <b>${age.weeks}m ${age.days}h</b></p>
           <p>Pakan (${feedItem?.name || '-'}): <b>${feedConsumed} kg</b></p>
-          <p>Total Telur: <b>${totalBreakdownKg.toFixed(2)} kg</b></p>
+          <p>Total Telur: <b>${totalBreakdownButir.toLocaleString()} butir</b></p>
           <p>HDP: <b>${hdp.toFixed(1)}%</b> (Std: ${standardHDP}%)</p>
           <hr class="my-2"/>
           <p class="text-amber-600 font-bold text-base">FCR Hari Ini: ${currentFCR}</p>
@@ -156,7 +156,7 @@ export default function Production() {
           mortalityCause: mortality > 0 ? mortalityCause : undefined,
           discardedEggs,
           breakdown,
-          totalKg: totalBreakdownKg,
+          totalButir: totalBreakdownButir,
           inputTime: new Date().toISOString(),
           inputBy: user?.name || 'Sistem',
         });
@@ -234,7 +234,7 @@ export default function Production() {
               <table className="w-full text-left text-[10px] min-w-max">
                 <thead className="bg-slate-900 text-white sticky top-0">
                   <tr>
-                    {['Tanggal', 'Jam Input', 'Diinput Oleh', 'Telur (butir)', 'Total (kg)', 'Pakan (kg)', 'FCR', 'Mati (ekor)', 'HDP %', 'Catatan'].map(h => (
+                    {['Tanggal', 'Jam Input', 'Diinput Oleh', 'Telur (butir)', 'Total (butir)', 'Pakan (kg)', 'FCR', 'Mati (ekor)', 'HDP %', 'Catatan'].map(h => (
                       <th key={h} className="px-3 py-3 font-bold uppercase tracking-widest whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -244,7 +244,8 @@ export default function Production() {
                       const hdp = activeBatch && activeBatch.currentCount > 0
                         ? ((log.eggCount / activeBatch.currentCount) * 100).toFixed(1)
                         : '-';
-                      const fcr = log.totalKg > 0 ? (log.feedConsumed / log.totalKg).toFixed(2) : '-';
+                      const logTotalButir = log.totalButir ?? (log as any).totalKg ?? 0;
+                      const fcr = logTotalButir > 0 ? (log.feedConsumed / logTotalButir).toFixed(2) : '-';
                       return (
                         <tr key={log.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                           <td className="px-3 py-3 font-bold whitespace-nowrap">{new Date(log.date).toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' })}</td>
@@ -256,7 +257,7 @@ export default function Production() {
                             <span className="flex items-center gap-1 text-slate-600 font-bold"><UserIcon size={10} />{log.inputBy || '-'}</span>
                           </td>
                           <td className="px-3 py-3 font-bold text-slate-900">{log.eggCount.toLocaleString()}</td>
-                          <td className="px-3 py-3 font-bold text-emerald-600">{log.totalKg.toFixed(2)}</td>
+                          <td className="px-3 py-3 font-bold text-emerald-600">{(log.totalButir ?? (log as any).totalKg ?? 0).toLocaleString()}</td>
                           <td className="px-3 py-3">{log.feedConsumed}</td>
                           <td className="px-3 py-3 font-bold text-amber-600">{fcr}</td>
                           <td className="px-3 py-3 font-bold text-rose-500">{log.mortality > 0 ? log.mortality : '-'}</td>
@@ -397,11 +398,11 @@ export default function Production() {
 
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
               <div>
-                <h3 className="font-black text-base text-slate-800 uppercase tracking-tighter italic">Klasifikasi Berat Telur</h3>
-                <p className="text-[9px] text-emerald-600 font-bold uppercase tracking-widest mt-1">Auto-masuk ke Stok Telur Inventori</p>
+                <h3 className="font-black text-base text-slate-800 uppercase tracking-tighter italic">Klasifikasi Telur</h3>
+                <p className="text-[9px] text-emerald-600 font-bold uppercase tracking-widest mt-1">Auto-masuk ke Stok Gudang</p>
               </div>
               <div className="px-3 py-1 bg-amber-50 border border-amber-200 text-[10px] font-black text-amber-700 self-start sm:self-center">
-                TOTAL: {totalBreakdownKg.toFixed(2)} KG
+                TOTAL: {totalBreakdownButir.toLocaleString()} BUTIR
               </div>
             </div>
 
@@ -414,12 +415,12 @@ export default function Production() {
                   </div>
                   <div className="relative">
                     <input
-                      type="number" placeholder="0.0" step="0.1"
+                      type="number" placeholder="0" step="1"
                       value={breakdown[cat] || ''}
                       onChange={e => handleBreakdownChange(cat, Number(e.target.value))}
                       className="w-full bg-slate-50 border border-slate-200 rounded-sm pl-4 pr-12 py-3 text-sm font-bold focus:outline-none focus:border-amber-500"
                     />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">kg</span>
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">butir</span>
                   </div>
                 </div>
               ))}

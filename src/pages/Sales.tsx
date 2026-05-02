@@ -44,10 +44,10 @@ export default function Sales() {
   // ── Egg Stock Lookup ─────────────────────────────────────────────────────────
   // Find the EGG_STOCK inventory item for the currently selected category
   const eggStockItem = inventory.find(
-    i => i.type === ItemType.EGG_STOCK && i.eggCategory === activeCategory
+    i => i.type === ItemType.EGG_STOCK && i.eggCategory === activeCategory && i.houseId === activeHouse?.id
   );
   const availableStock = eggStockItem ? eggStockItem.quantity : null; // null = no EGG_STOCK tracking (e.g. NON_EGG)
-  const isOverStock = availableStock !== null && quantity > availableStock && !isFree;
+  const isOverStock = availableStock !== null && quantity > availableStock;
 
   const totalPrice = isFree ? 0 : quantity * currentPrice;
 
@@ -59,7 +59,7 @@ export default function Sales() {
     if (isOverStock) {
       Swal.fire({
         title: 'Stok Tidak Cukup!',
-        html: `<div class="text-sm"><p>Stok <b>${activeCategory}</b> tersedia: <b>${availableStock?.toFixed(2)} kg</b></p><p>Jumlah yang diinput: <b>${quantity} kg</b></p><p class="text-red-500 mt-2 font-bold">Tidak dapat menjual melebihi stok yang tersedia.</p></div>`,
+        html: `<div class="text-sm"><p>Stok <b>${activeCategory}</b> tersedia: <b>${availableStock?.toLocaleString()} butir</b></p><p>Jumlah yang diinput: <b>${quantity.toLocaleString()} butir</b></p><p class="text-rose-600 mt-2 font-black uppercase tracking-widest italic">⚠ Melebihi stok tersedia (${availableStock?.toLocaleString()} butir)</p></div>`,
         icon: 'error',
         confirmButtonColor: '#0f172a',
       });
@@ -71,7 +71,7 @@ export default function Sales() {
       html: `
         <div class="text-left space-y-2 text-sm">
           <p><b>Produk:</b> ${activeCategory.replace('_', ' ')}</p>
-          <p><b>Jumlah:</b> ${quantity} Unit</p>
+          <p><b>Jumlah:</b> ${quantity.toLocaleString()} Butir</p>
           <p><b>Total:</b> ${isFree ? 'FREE' : formatCurrency(totalPrice)}</p>
         </div>
       `,
@@ -97,12 +97,10 @@ export default function Sales() {
             customer: customerName.trim() || 'Umum'
         });
 
-        // Deduct from EGG_STOCK inventory
-        if (eggStockItem) {
-          updateInventory(eggStockItem.id, -quantity);
-        }
+        // saveSale in GlobalContext already handles inventory deduction
+        // updateInventory(eggStockItem.id, -quantity);
 
-        Swal.fire({ title: 'Transaksi Berhasil!', text: `Penjualan ${quantity} kg ${activeCategory} berhasil dicatat.`, icon: 'success', confirmButtonColor: '#0f172a' });
+        Swal.fire({ title: 'Transaksi Berhasil!', text: `Penjualan ${quantity.toLocaleString()} butir ${activeCategory} berhasil dicatat.`, icon: 'success', confirmButtonColor: '#0f172a' });
         setQuantity(0);
         setIsFree(false);
         setCustomerName('');
@@ -191,18 +189,18 @@ export default function Sales() {
                 {/* Quantity input with stock badge */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Jumlah (kg / papan)</label>
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Jumlah (Butir)</label>
                     {availableStock !== null && (
                       <span className={cn('text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border rounded-sm',
                         isOverStock ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200')}>
-                        Stok: {availableStock.toFixed(2)} kg
+                        Stok: {availableStock.toLocaleString()} butir
                       </span>
                     )}
                   </div>
                   <div className="relative">
                     <input
                       type="number"
-                      placeholder="0.00"
+                      placeholder="0"
                       value={quantity || ''}
                       onChange={(e) => setQuantity(Number(e.target.value))}
                       className={cn(
@@ -210,11 +208,11 @@ export default function Sales() {
                         isOverStock ? "border-rose-400 focus:border-rose-500 bg-rose-50" : "border-slate-200 focus:border-amber-500"
                       )}
                     />
-                    <span className="absolute right-6 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Unit</span>
+                    <span className="absolute right-6 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">butir</span>
                   </div>
                   {isOverStock && (
                     <p className="text-[10px] text-rose-600 font-bold mt-1 flex items-center gap-1">
-                      ⚠ Melebihi stok tersedia ({availableStock?.toFixed(2)} kg)
+                      ⚠ Melebihi stok tersedia ({availableStock?.toLocaleString()} butir)
                     </p>
                   )}
                 </div>
@@ -289,7 +287,7 @@ export default function Sales() {
                         <div className="text-xs font-bold text-slate-800 uppercase tracking-tight">{sale.category}</div>
                         <div className="text-[10px] text-slate-400 font-medium lowercase italic">{sale.customer}</div>
                       </td>
-                      <td className="px-6 py-4 text-xs font-bold text-slate-900">{sale.quantity} Unit</td>
+                      <td className="px-6 py-4 text-xs font-bold text-slate-900">{sale.quantity.toLocaleString()} Butir</td>
                       <td className="px-6 py-4 text-xs font-bold text-slate-900 text-right italic">{sale.isFree ? 'FREE' : formatCurrency(sale.total)}</td>
                       <td className="px-6 py-4 text-center">
                         <span className="bg-emerald-50 text-emerald-600 text-[10px] font-black uppercase px-2 py-1 rounded-sm border border-emerald-100">Paid</span>
@@ -322,7 +320,7 @@ export default function Sales() {
                         return (
                             <>
                                 <div>
-                                    <p className="text-3xl font-black italic tracking-tighter">{totalSold.toFixed(2)} Unit</p>
+                                    <p className="text-3xl font-black italic tracking-tighter">{totalSold.toLocaleString()} Butir</p>
                                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Total Terjual (Today)</p>
                                 </div>
                                 <div>

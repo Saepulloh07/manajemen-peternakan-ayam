@@ -24,8 +24,8 @@ export interface ProductionLog {
   mortality: number;
   mortalityCause?: MortalityCause;
   discardedEggs: number;
-  breakdown: Record<string, number>; // EggCategory → kg
-  totalKg: number;
+  breakdown: Record<string, number>; // EggCategory → butir
+  totalButir: number;
   inputTime?: string;            // ISO datetime when record was submitted
   inputBy?: string;              // user name who submitted
 }
@@ -69,14 +69,14 @@ const DEFAULT_INVENTORY: InventoryItem[] = [
   // Finished Feed
   { id: 'inv-ff-1', name: 'Pakan Jadi Layer Mix',  type: ItemType.FINISHED_FEED, quantity: 0,    unit: 'kg', reorderPoint: 500, lastPrice: 0 },
   // Egg Stock — one per category
-  { id: 'inv-egg-BM',       name: 'Stok Telur BM',        type: ItemType.EGG_STOCK, quantity: 0, unit: 'kg', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.BM },
-  { id: 'inv-egg-KRC',      name: 'Stok Telur KRC',       type: ItemType.EGG_STOCK, quantity: 0, unit: 'kg', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.KRC },
-  { id: 'inv-egg-KS',       name: 'Stok Telur KS',        type: ItemType.EGG_STOCK, quantity: 0, unit: 'kg', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.KS },
-  { id: 'inv-egg-PELOR',    name: 'Stok Telur Pelor',     type: ItemType.EGG_STOCK, quantity: 0, unit: 'kg', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.PELOR },
-  { id: 'inv-egg-RETAK',    name: 'Stok Telur Retak',     type: ItemType.EGG_STOCK, quantity: 0, unit: 'kg', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.RETAK },
-  { id: 'inv-egg-PECAH',    name: 'Stok Telur Pecah',     type: ItemType.EGG_STOCK, quantity: 0, unit: 'kg', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.PECAH },
-  { id: 'inv-egg-KRC_RETAK',name: 'Stok Telur KRC Retak', type: ItemType.EGG_STOCK, quantity: 0, unit: 'kg', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.KRC_RETAK },
-  { id: 'inv-egg-KS_RETAK', name: 'Stok Telur KS Retak',  type: ItemType.EGG_STOCK, quantity: 0, unit: 'kg', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.KS_RETAK },
+  { id: 'inv-egg-BM',       name: 'Stok Telur BM',        type: ItemType.EGG_STOCK, quantity: 0, unit: 'butir', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.BM },
+  { id: 'inv-egg-KRC',      name: 'Stok Telur KRC',       type: ItemType.EGG_STOCK, quantity: 0, unit: 'butir', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.KRC },
+  { id: 'inv-egg-KS',       name: 'Stok Telur KS',        type: ItemType.EGG_STOCK, quantity: 0, unit: 'butir', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.KS },
+  { id: 'inv-egg-PELOR',    name: 'Stok Telur Pelor',     type: ItemType.EGG_STOCK, quantity: 0, unit: 'butir', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.PELOR },
+  { id: 'inv-egg-RETAK',    name: 'Stok Telur Retak',     type: ItemType.EGG_STOCK, quantity: 0, unit: 'butir', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.RETAK },
+  { id: 'inv-egg-PECAH',    name: 'Stok Telur Pecah',     type: ItemType.EGG_STOCK, quantity: 0, unit: 'butir', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.PECAH },
+  { id: 'inv-egg-KRC_RETAK',name: 'Stok Telur KRC Retak', type: ItemType.EGG_STOCK, quantity: 0, unit: 'butir', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.KRC_RETAK },
+  { id: 'inv-egg-KS_RETAK', name: 'Stok Telur KS Retak',  type: ItemType.EGG_STOCK, quantity: 0, unit: 'butir', reorderPoint: 0, lastPrice: 0, eggCategory: EggCategory.KS_RETAK },
   // Medicine
   { id: 'inv-med-1', name: 'Vitamin C',           type: ItemType.MEDICINE, quantity: 10,  unit: 'botol', reorderPoint: 2, lastPrice: 25000 },
   { id: 'inv-med-2', name: 'Vaksin Newcastle',    type: ItemType.VACCINE,  quantity: 5,   unit: 'vial',  reorderPoint: 1, lastPrice: 75000 },
@@ -228,20 +228,20 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     // FIX #2: Auto-increment each egg category stock (Scoped per house)
-    Object.entries(logData.breakdown).forEach(([category, kg]) => {
-      if (kg > 0) {
+    Object.entries(logData.breakdown).forEach(([category, count]) => {
+      if (count > 0) {
         setInventory(prev => {
           const existing = prev.find(item => item.type === ItemType.EGG_STOCK && item.eggCategory === category && item.houseId === logData.houseId);
           if (existing) {
-            return prev.map(item => item.id === existing.id ? { ...item, quantity: item.quantity + kg, houseId: logData.houseId } : item);
+            return prev.map(item => item.id === existing.id ? { ...item, quantity: item.quantity + count, houseId: logData.houseId } : item);
           } else {
             return [...prev, {
               id: `inv-egg-${logData.houseId}-${category}-${Date.now()}`,
               houseId: logData.houseId,
               name: `Stok Telur ${category}`,
               type: ItemType.EGG_STOCK,
-              quantity: kg,
-              unit: 'kg',
+              quantity: count,
+              unit: 'butir',
               reorderPoint: 0,
               lastPrice: 0,
               eggCategory: category as EggCategory
@@ -269,26 +269,27 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const newSale = { ...saleData, id: `sale-${Date.now()}` };
     setSalesLogs(prev => [...prev, newSale]);
 
-    if (!saleData.isFree) {
-      setInventory(prev => prev.map(item => {
-        if (item.type === ItemType.EGG_STOCK && item.eggCategory === saleData.category && item.houseId === saleData.houseId) {
-          return { ...item, quantity: Math.max(0, item.quantity - saleData.quantity) };
-        }
-        return item;
-      }));
+    // Always deduct from inventory for both paid and free sales
+    setInventory(prev => prev.map(item => {
+      if (item.type === ItemType.EGG_STOCK && item.eggCategory === saleData.category && item.houseId === saleData.houseId) {
+        return { ...item, quantity: Math.max(0, item.quantity - saleData.quantity) };
+      }
+      return item;
+    }));
 
-      addTransaction({
-        houseId: saleData.houseId,
-        date: saleData.date,
-        description: `Penjualan Telur: ${saleData.category} - ${saleData.customer || 'Umum'}`,
-        qty: `${saleData.quantity} kg`,
-        price: saleData.price,
-        total: saleData.total,
-        account: 'Kas Tunai',
-        type: 'INCOME',
-        category: 'Penjualan'
-      });
-    }
+    addTransaction({
+      houseId: saleData.houseId,
+      date: saleData.date,
+      description: saleData.isFree 
+        ? `Alokasi Telur Gratis: ${saleData.category} - ${saleData.customer || 'Umum'}`
+        : `Penjualan Telur: ${saleData.category} - ${saleData.customer || 'Umum'}`,
+      qty: `${saleData.quantity} butir`,
+      price: saleData.isFree ? 0 : saleData.price,
+      total: saleData.isFree ? 0 : saleData.total,
+      account: saleData.isFree ? 'Non-Tunai' : 'Kas Tunai',
+      type: 'INCOME',
+      category: saleData.isFree ? 'Free Goods' : 'Penjualan'
+    });
   };
 
   // Recipe CRUD
@@ -309,9 +310,9 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const getCumulativeFCR = (houseId: string): number => {
     const logs = productionLogs.filter(p => p.houseId === houseId);
     const totalFeed = logs.reduce((a, b) => a + b.feedConsumed, 0);
-    const totalEggKg = logs.reduce((a, b) => a + b.totalKg, 0);
-    if (totalEggKg === 0) return 0;
-    return totalFeed / totalEggKg;
+    const totalButir = logs.reduce((a, b) => a + b.totalButir, 0);
+    if (totalButir === 0) return 0;
+    return totalFeed / totalButir;
   };
 
   /** Average feed intake per bird per day (grams), based on most recent log */
@@ -326,8 +327,8 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const getFlockAnalytics = (houseId: string, currentCount: number): FlockAnalytics => {
     const logs = productionLogs.filter(p => p.houseId === houseId);
     const totalFeed = logs.reduce((a, b) => a + b.feedConsumed, 0);
-    const totalEggKg = logs.reduce((a, b) => a + b.totalKg, 0);
-    const cumulativeFCR = totalEggKg > 0 ? totalFeed / totalEggKg : 0;
+    const totalButir = logs.reduce((a, b) => a + b.totalButir, 0);
+    const cumulativeFCR = totalButir > 0 ? totalFeed / totalButir : 0;
 
     // Estimate feed cost from inventory lastPrice
     const totalFeedCost = logs.reduce((acc, log) => {
@@ -335,7 +336,7 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return acc + (item ? log.feedConsumed * item.lastPrice : 0);
     }, 0);
 
-    const hppPerKg = totalEggKg > 0 ? totalFeedCost / totalEggKg : 0;
+    const hppPerButir = totalButir > 0 ? totalFeedCost / totalButir : 0;
 
     const totalIncome = salesLogs
       .filter(s => s.houseId === houseId && !s.isFree)
@@ -346,8 +347,8 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       houseId,
       cumulativeFCR,
       feedIntakePerBirdGrams: getFeedIntakePerBird(houseId, currentCount),
-      hppPerKg,
-      totalEggKg,
+      hppPerButir,
+      totalButir,
       totalFeedCost,
       netPL,
     };
