@@ -1,17 +1,23 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { FlockBatch } from './types';
+import { FlockBatch, PopulationMutation, MutationType, MortalityCause } from './types';
+import { useGlobalData } from './GlobalContext';
 
 interface FlockContextType {
   flocks: FlockBatch[];
+  mutations: PopulationMutation[];
   addFlock: (flock: Omit<FlockBatch, 'id'>) => void;
   updateFlock: (id: string, updates: Partial<FlockBatch>) => void;
   deleteFlock: (id: string) => void;
   getActiveFlockByHouse: (houseId: string) => FlockBatch | undefined;
+  addMutation: (mutation: Omit<PopulationMutation, 'id'>) => void;
+  deleteMutation: (id: string) => void;
 }
+
 
 const FlockContext = createContext<FlockContextType | undefined>(undefined);
 
 export const FlockProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { addTransaction, deleteTransaction } = useGlobalData();
   const [flocks, setFlocks] = useState<FlockBatch[]>(() => {
     const saved = localStorage.getItem('poultry_flocks');
     if (saved) return JSON.parse(saved);
@@ -41,9 +47,18 @@ export const FlockProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     ];
   });
 
+  const [mutations, setMutations] = useState<PopulationMutation[]>(() => {
+    const saved = localStorage.getItem('poultry_mutations');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   useEffect(() => {
     localStorage.setItem('poultry_flocks', JSON.stringify(flocks));
   }, [flocks]);
+
+  useEffect(() => {
+    localStorage.setItem('poultry_mutations', JSON.stringify(mutations));
+  }, [mutations]);
 
   const addFlock = (flockData: Omit<FlockBatch, 'id'>) => {
     const newFlock: FlockBatch = {
@@ -65,10 +80,6 @@ export const FlockProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setFlocks(prev => prev.map(f => {
       if (f.id === id) {
         const updated = { ...f, ...updates };
-        // If activating, deactivate others
-        if (updates.isActive && !f.isActive) {
-          // We'll handle this in a separate setFlocks call or just be careful
-        }
         return updated;
       }
       return f;
@@ -93,12 +104,102 @@ export const FlockProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return flocks.find(f => f.houseId === houseId && f.isActive);
   };
 
+  const addMutation = (mutData: Omit<PopulationMutation, 'id'>) => {
+    let transactionId: string | undefined;
+
+    // Financial Integration (Add transaction first to get ID)
+    if (mutData.type === MutationType.ARRIVAL && mutData.totalPrice) {
+      transactionId = addTransaction({
+        houseId: mutData.houseId,
+        date: mutData.date,
+        description: `Pembelian DOC: ${mutData.count} ekor @ Rp${mutData.pricePerBird?.toLocaleString()}`,
+        qty: `${mutData.count} ekor`,
+        price: mutData.pricePerBird || 0,
+        total: mutData.totalPrice,
+        account: 'Kas Tunai',
+        type: 'EXPENSE',
+        category: 'Pembelian DOC'
+      });
+    }
+
+    if (mutData.type === MutationType.CULLING && mutData.totalPrice) {
+      transactionId = addTransaction({
+        houseId: mutData.houseId,
+        date: mutData.date,
+        description: `Penjualan Ayam Afkir: ${mutData.count} ekor @ Rp${mutData.pricePerBird?.toLocaleString()}`,
+        qty: `${mutData.count} ekor`,
+        price: mutData.pricePerBird || 0,
+        total: mutData.totalPrice,
+        account: 'Kas Tunai',
+        type: 'INCOME',
+        category: 'Penjualan Afkir'
+      });
+    }
+
+    const newMut: PopulationMutation = { 
+      ...mutData, 
+      id: `mut-${Date.now()}`,
+      transactionId 
+    };
+    setMutations(prev => [newMut, ...prev]);
+
+    // Update Flock Counts
+    setFlocks(prev => prev.map(f => {
+      if (f.houseId === mutData.houseId && f.isActive) {
+        let newCount = f.currentCount;
+        if (mutData.type === MutationType.ARRIVAL) newCount += mutData.count;
+        if (mutData.type === MutationType.MORTALITY) newCount -= mutData.count;
+        if (mutData.type === MutationType.CULLING) newCount -= mutData.count;
+        if (mutData.type === MutationType.TRANSFER) newCount -= mutData.count;
+        return { ...f, currentCount: Math.max(0, newCount) };
+      }
+      // If TRANSFER, add to target house
+      if (mutData.type === MutationType.TRANSFER && f.houseId === mutData.targetHouseId && f.isActive) {
+        return { ...f, currentCount: f.currentCount + mutData.count };
+      }
+      return f;
+    }));
+  };
+
+  const deleteMutation = (id: string) => {
+    const mut = mutations.find(m => m.id === id);
+    if (!mut) return;
+
+    setMutations(prev => prev.filter(m => m.id !== id));
+
+    // Rollback Flock Counts
+    setFlocks(prev => prev.map(f => {
+      if (f.houseId === mut.houseId && f.isActive) {
+        let newCount = f.currentCount;
+        if (mut.type === MutationType.ARRIVAL) newCount -= mut.count;
+        if (mut.type === MutationType.MORTALITY) newCount += mut.count;
+        if (mut.type === MutationType.CULLING) newCount += mut.count;
+        if (mut.type === MutationType.TRANSFER) newCount += mut.count;
+        return { ...f, currentCount: Math.max(0, newCount) };
+      }
+      if (mut.type === MutationType.TRANSFER && f.houseId === mut.targetHouseId && f.isActive) {
+        return { ...f, currentCount: Math.max(0, f.currentCount - mut.count) };
+      }
+      return f;
+    }));
+
+    // Delete linked transaction
+    if (mut.transactionId) {
+      deleteTransaction(mut.transactionId);
+    }
+  };
+
   return (
-    <FlockContext.Provider value={{ flocks, addFlock, updateFlock, deleteFlock, getActiveFlockByHouse }}>
+    <FlockContext.Provider value={{ 
+      flocks, mutations, addFlock, updateFlock, deleteFlock, getActiveFlockByHouse,
+      addMutation, deleteMutation 
+    }}>
       {children}
     </FlockContext.Provider>
   );
 };
+
+
 
 export const useFlock = () => {
   const context = useContext(FlockContext);

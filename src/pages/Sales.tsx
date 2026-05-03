@@ -30,12 +30,13 @@ import { useGlobalData } from '../GlobalContext';
 
 export default function Sales() {
   const { activeHouse } = useHouse();
-  const { saveSale, salesLogs, inventory, updateInventory, farmSettings } = useGlobalData();
+  const { saveSale, salesLogs, productionLogs, inventory, updateInventory, farmSettings } = useGlobalData();
   const [activeCategory, setActiveCategory] = useState<string>(EggCategory.BM);
   const [quantity, setQuantity] = useState(0);
   const [isFree, setIsFree] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [buyerType, setBuyerType] = useState('REGULAR');
+
 
   // Load master prices from FarmSettings
   const masterPrices = farmSettings.masterPrices || [];
@@ -51,6 +52,33 @@ export default function Sales() {
 
   const totalPrice = isFree ? 0 : quantity * currentPrice;
 
+  // ── Free Goods Limit Calculation ─────────────────────────────────────────────
+  const freeGoodsLimitInfo = React.useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    const monthlyProd = productionLogs
+      .filter(log => {
+        const d = new Date(log.date);
+        return log.houseId === activeHouse?.id && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+      })
+      .reduce((sum, log) => sum + (log.totalButir || 0), 0);
+
+    const monthlyFree = salesLogs
+      .filter(sale => {
+        const d = new Date(sale.date);
+        return sale.houseId === activeHouse?.id && sale.isFree && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+      })
+      .reduce((sum, sale) => sum + sale.quantity, 0);
+
+    const limit = (monthlyProd * (farmSettings.wasteFreePercentage || 0)) / 100;
+    const remaining = Math.max(0, limit - monthlyFree);
+    const isExceeded = isFree && (monthlyFree + quantity) > limit;
+
+    return { monthlyProd, monthlyFree, limit, remaining, isExceeded };
+  }, [productionLogs, salesLogs, activeHouse, farmSettings, isFree, quantity]);
+
   const handleCompleteTransaction = () => {
     if (quantity <= 0) {
       Swal.fire({ title: 'Input Invalid', text: 'Jumlah unit harus lebih dari 0.', icon: 'warning', confirmButtonColor: '#0f172a' });
@@ -60,6 +88,25 @@ export default function Sales() {
       Swal.fire({
         title: 'Stok Tidak Cukup!',
         html: `<div class="text-sm"><p>Stok <b>${activeCategory}</b> tersedia: <b>${availableStock?.toLocaleString()} butir</b></p><p>Jumlah yang diinput: <b>${quantity.toLocaleString()} butir</b></p><p class="text-rose-600 mt-2 font-black uppercase tracking-widest italic">⚠ Melebihi stok tersedia (${availableStock?.toLocaleString()} butir)</p></div>`,
+        icon: 'error',
+        confirmButtonColor: '#0f172a',
+      });
+      return;
+    }
+
+    if (isFree && freeGoodsLimitInfo.isExceeded) {
+      Swal.fire({
+        title: 'Limit Free Goods Tercapai!',
+        html: `
+          <div class="text-left space-y-2 text-sm">
+            <p>Alokasi gratis bulan ini telah mencapai batas <b>${farmSettings.wasteFreePercentage}%</b> dari total produksi.</p>
+            <hr class="border-slate-100 my-2" />
+            <p>Total Produksi (Bulan ini): <b>${freeGoodsLimitInfo.monthlyProd.toLocaleString()} butir</b></p>
+            <p>Batas Alokasi Gratis: <b>${Math.floor(freeGoodsLimitInfo.limit).toLocaleString()} butir</b></p>
+            <p>Telah Dialokasikan: <b>${freeGoodsLimitInfo.monthlyFree.toLocaleString()} butir</b></p>
+            <p class="text-rose-600 font-bold mt-2 italic uppercase tracking-tighter">⚠ Tidak dapat menambah alokasi gratis lagi bulan ini.</p>
+          </div>
+        `,
         icon: 'error',
         confirmButtonColor: '#0f172a',
       });
@@ -97,9 +144,6 @@ export default function Sales() {
             customer: customerName.trim() || 'Umum'
         });
 
-        // saveSale in GlobalContext already handles inventory deduction
-        // updateInventory(eggStockItem.id, -quantity);
-
         Swal.fire({ title: 'Transaksi Berhasil!', text: `Penjualan ${quantity.toLocaleString()} butir ${activeCategory} berhasil dicatat.`, icon: 'success', confirmButtonColor: '#0f172a' });
         setQuantity(0);
         setIsFree(false);
@@ -107,6 +151,7 @@ export default function Sales() {
       }
     });
   };
+
 
   return (
     <div className="space-y-8 pb-20">
@@ -167,8 +212,14 @@ export default function Sales() {
                         </div>
                         <div>
                             <p className="text-xs font-bold text-slate-900">Alokasi Free (Warga)</p>
-                            <p className="text-[10px] text-slate-400 font-medium italic">Batas: 1% Prod/Bulan</p>
+                            <p className={cn(
+                                "text-[10px] font-medium italic",
+                                freeGoodsLimitInfo.remaining > 0 ? "text-slate-400" : "text-rose-500"
+                            )}>
+                                Sisa Batas: {Math.floor(freeGoodsLimitInfo.remaining).toLocaleString()} butir
+                            </p>
                         </div>
+
                     </div>
                     <button 
                         onClick={() => setIsFree(!isFree)}

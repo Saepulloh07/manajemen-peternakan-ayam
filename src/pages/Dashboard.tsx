@@ -7,7 +7,7 @@ import React, { useState, useMemo } from 'react';
 import {
   TrendingUp, Skull, Package, Activity, AlertTriangle,
   ArrowUpRight, TrendingDown, Target, Egg, DollarSign,
-  Syringe, CheckCircle2, BarChart3, Flame,
+  Syringe, CheckCircle2, BarChart3, Flame, Users
 } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
@@ -15,7 +15,8 @@ import {
 } from 'recharts';
 import { formatCurrency, cn } from '../lib/utils';
 import { motion } from 'motion/react';
-import { EggCategory } from '../types';
+import { EggCategory, MutationType } from '../types';
+
 
 import { useHouse } from '../HouseContext';
 import { useFlock } from '../FlockContext';
@@ -85,8 +86,9 @@ function KpiCard({ label, value, sub, icon: Icon, trend, trendLabel, accentClass
 
 export default function Dashboard() {
   const { activeHouse } = useHouse();
-  const { getActiveFlockByHouse } = useFlock();
+  const { getActiveFlockByHouse, mutations } = useFlock();
   const { productionLogs, salesLogs, inventory, mortalityRecords, transactions, farmSettings } = useGlobalData();
+
 
   const [chartPeriod, setChartPeriod] = useState<'HARIAN' | 'MINGGUAN' | 'BULANAN'>('HARIAN');
 
@@ -207,9 +209,15 @@ export default function Dashboard() {
 
   const feedIntakePerBird = lastLog && currentCount > 0 ? (lastLog.feedConsumed * 1000) / currentCount : 0;
 
-  const totalMortality = (activeBatch ? (activeBatch as any).initialCount - currentCount : 0);
+  const totalMortality = useMemo(() => 
+    mutations.filter(m => m.houseId === activeHouse?.id && m.type === MutationType.MORTALITY).reduce((a, b) => a + b.count, 0),
+    [mutations, activeHouse]);
+
   const mortalityPct = activeBatch && (activeBatch as any).initialCount > 0
     ? (totalMortality / (activeBatch as any).initialCount) * 100 : 0;
+
+  // ── Population Trend ────────────────────────────────────────────────────────
+  const lastMutation = mutations.filter(m => m.houseId === activeHouse?.id || m.targetHouseId === activeHouse?.id)[0];
 
   // ── Feed Stock Alert ────────────────────────────────────────────────────────
   const feedItems = inventory.filter(i => (i.type === 'FINISHED_FEED' || i.type === 'RAW_MATERIAL') && i.houseId === activeHouse?.id);
@@ -256,6 +264,16 @@ export default function Dashboard() {
       {/* KPI Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard
+          label="Populasi Aktif"
+          value={currentCount.toLocaleString()}
+          sub={activeBatch ? `Dari ${activeBatch.initialCount.toLocaleString()} ekor` : 'N/A'}
+          icon={Users}
+          progress={activeBatch ? (currentCount / activeBatch.initialCount) * 100 : 0}
+          trend={lastMutation ? (lastMutation.type === MutationType.ARRIVAL ? 'up' : 'down') : 'neutral'}
+          trendLabel={lastMutation ? `${lastMutation.type.replace('_', ' ')}: ${lastMutation.count}` : 'Stabil'}
+          accentClass="bg-white border-slate-200"
+        />
+        <KpiCard
           label="HDP Hari Ini"
           value={`${todayHDP.toFixed(1)}%`}
           sub={`Std ${ageWeeks}mg: ${standardHDP}%`}
@@ -274,16 +292,6 @@ export default function Dashboard() {
           trendLabel={cumulativeFCR < farmSettings.targetFCR ? 'Efisien' : 'Di atas target'}
         />
         <KpiCard
-          label="Intake / Ekor"
-          value={feedIntakePerBird.toFixed(0) + 'g'}
-          sub={`Std: ${farmSettings.stdFeedIntake}g`}
-          icon={Flame}
-          progress={(feedIntakePerBird / farmSettings.stdFeedIntake) * 100}
-          trend={Math.abs(feedIntakePerBird - farmSettings.stdFeedIntake) < 5 ? 'neutral' : feedIntakePerBird > farmSettings.stdFeedIntake ? 'down' : 'up'}
-          trendLabel={Math.abs(feedIntakePerBird - farmSettings.stdFeedIntake) < 5 ? 'Normal' : feedIntakePerBird > farmSettings.stdFeedIntake ? 'Boros' : 'Kurang'}
-          accentClass={Math.abs(feedIntakePerBird - farmSettings.stdFeedIntake) > 10 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}
-        />
-        <KpiCard
           label="Mortalitas Siklus"
           value={`${mortalityPct.toFixed(2)}%`}
           sub={`Batas: ${farmSettings.mortalityAlertThreshold}%/bln`}
@@ -293,6 +301,7 @@ export default function Dashboard() {
           accentClass={mortalityPct >= farmSettings.mortalityAlertThreshold ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200'}
         />
       </div>
+
 
       <div className="grid grid-cols-12 gap-6">
         {/* Main Chart — HDP Trend vs Standard */}
@@ -484,25 +493,44 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Flock Stats */}
-          <div className="bg-slate-900 border border-slate-800 p-5 text-white">
+          {/* Population Summary */}
+          <div className="bg-slate-900 border border-slate-800 p-5 text-white relative overflow-hidden">
             <h3 className="text-amber-500 text-[9px] font-black uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-              <Flame size={12} /> Status Flock
+              <Activity size={12} /> Ringkasan Populasi
             </h3>
-            <div className="space-y-3">
-              {[
-                { label: 'Populasi Aktif', value: currentCount.toLocaleString() + ' ekor' },
-                { label: 'Total Produksi', value: totalButirCount.toLocaleString() + ' butir' },
-                { label: 'Total Pakan', value: totalFeed.toFixed(1) + ' kg' },
-                { label: 'Net Profit', value: formatCurrency(netPL) },
-              ].map(s => (
-                <div key={s.label} className="flex justify-between">
-                  <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">{s.label}</span>
-                  <span className="text-[10px] text-white font-bold">{s.value}</span>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-[8px] text-slate-500 uppercase font-bold tracking-widest mb-1">DOC Masuk</p>
+                  <p className="text-sm font-black text-emerald-400">
+                    {mutations.filter(m => m.houseId === activeHouse?.id && m.type === MutationType.ARRIVAL).reduce((a, b) => a + b.count, 0).toLocaleString()}
+                  </p>
                 </div>
-              ))}
+                <div>
+                  <p className="text-[8px] text-slate-500 uppercase font-bold tracking-widest mb-1">Mati/Afkir</p>
+                  <p className="text-sm font-black text-rose-400">
+                    {(totalMortality + mutations.filter(m => m.houseId === activeHouse?.id && m.type === MutationType.CULLING).reduce((a, b) => a + b.count, 0)).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="pt-3 border-t border-slate-800">
+                <p className="text-[8px] text-slate-500 uppercase font-bold tracking-widest mb-2">Mutasi Terakhir</p>
+                <div className="space-y-2">
+                  {mutations.filter(m => m.houseId === activeHouse?.id || m.targetHouseId === activeHouse?.id).slice(0, 3).map(m => (
+                    <div key={m.id} className="flex items-center justify-between text-[9px] bg-white/5 p-2 rounded-sm">
+                      <span className="text-slate-400 font-bold uppercase">{m.type.replace('_', ' ')}</span>
+                      <span className={cn('font-black italic', (m.type === MutationType.ARRIVAL || m.targetHouseId === activeHouse?.id) ? 'text-emerald-400' : 'text-rose-400')}>
+                        {(m.type === MutationType.ARRIVAL || m.targetHouseId === activeHouse?.id) ? '+' : '-'}{m.count}
+                      </span>
+                    </div>
+                  ))}
+                  {mutations.length === 0 && <p className="text-[8px] text-slate-600 italic">Belum ada mutasi</p>}
+                </div>
+              </div>
             </div>
           </div>
+
         </div>
       </div>
     </div>

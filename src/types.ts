@@ -184,9 +184,31 @@ export interface MortalityRecord {
   date: string;
   count: number;
   cause: MortalityCause;
-  productionLogId: string;
+  productionLogId?: string;
   notes?: string;
 }
+
+export enum MutationType {
+  ARRIVAL = 'ARRIVAL',       // DOC Masuk
+  TRANSFER = 'TRANSFER',     // Mutasi Kandang
+  MORTALITY = 'MORTALITY',   // Mortalitas
+  CULLING = 'CULLING',       // Afkir
+}
+
+export interface PopulationMutation {
+  id: string;
+  houseId: string;
+  targetHouseId?: string;    // For TRANSFER
+  date: string;
+  type: MutationType;
+  count: number;
+  pricePerBird?: number;     // For ARRIVAL (purchase) or CULLING (sale)
+  totalPrice?: number;
+  notes?: string;
+  transactionId?: string;    // Linked financial record
+}
+
+
 
 // Feed Recipe (Formulasi Ransum)
 export interface RecipeIngredient {

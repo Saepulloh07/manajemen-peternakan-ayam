@@ -70,9 +70,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [sidebarPermissions, setSidebarPermissions] = useState<Record<UserRole, string[]>>(() => {
     const saved = localStorage.getItem('poultry_permissions');
     return saved ? JSON.parse(saved) : {
-      [UserRole.SUPER_ADMIN]: ['dashboard', 'production', 'feedFormulation', 'vaccine', 'sales', 'inventory', 'finance', 'workers', 'settings'],
-      [UserRole.ADMIN]: ['dashboard', 'production', 'feedFormulation', 'vaccine', 'sales', 'inventory'],
-      [UserRole.WORKER]: ['production', 'vaccine'],
+      [UserRole.SUPER_ADMIN]: ['dashboard', 'production', 'population', 'feedFormulation', 'vaccine', 'sales', 'inventory', 'finance', 'workers', 'settings'],
+      [UserRole.ADMIN]: ['dashboard', 'production', 'population', 'feedFormulation', 'vaccine', 'sales', 'inventory'],
+      [UserRole.WORKER]: ['production', 'population', 'vaccine'],
+
     };
   });
 
@@ -90,6 +91,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     localStorage.setItem('poultry_permissions', JSON.stringify(sidebarPermissions));
   }, [sidebarPermissions]);
+
+  // Migration for new tabs
+  React.useEffect(() => {
+    const defaultPerms = {
+      [UserRole.SUPER_ADMIN]: ['dashboard', 'production', 'population', 'feedFormulation', 'vaccine', 'sales', 'inventory', 'finance', 'workers', 'settings'],
+      [UserRole.ADMIN]: ['dashboard', 'production', 'population', 'feedFormulation', 'vaccine', 'sales', 'inventory'],
+      [UserRole.WORKER]: ['production', 'population', 'vaccine'],
+    };
+
+    let needsUpdate = false;
+    const currentPerms = { ...sidebarPermissions };
+
+    Object.keys(defaultPerms).forEach((role) => {
+      const r = role as UserRole;
+      if (defaultPerms[r].some(p => !currentPerms[r]?.includes(p))) {
+        currentPerms[r] = Array.from(new Set([...(currentPerms[r] || []), ...defaultPerms[r]]));
+        needsUpdate = true;
+      }
+    });
+
+    if (needsUpdate) {
+      setSidebarPermissions(currentPerms);
+    }
+  }, []);
+
 
   const login = (email: string, password: string): boolean => {
     const found = users.find(

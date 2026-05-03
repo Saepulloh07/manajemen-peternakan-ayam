@@ -67,9 +67,17 @@ export default function Finance() {
     const houseAssets = assets.filter(a => a.houseId === activeHouse?.id);
 
     // For BUKU_TRANSAKSI - separate into 3 ledgers
-    const salesTransactions = houseTransactions.filter(t => t.type === 'INCOME' && (t.category === 'Penjualan' || t.category === 'Free Goods'));
-    const bahanTransactions = houseTransactions.filter(t => t.type === 'EXPENSE' && (t.description.toLowerCase().includes('stok') || t.description.toLowerCase().includes('pakan') || t.description.toLowerCase().includes('bahan') || t.description.toLowerCase().includes('beli stok') || t.description.toLowerCase().includes('pembelian stok')));
+    const salesTransactions = houseTransactions.filter(t => t.type === 'INCOME' && (t.category === 'Penjualan' || t.category === 'Free Goods' || t.category === 'Penjualan Afkir'));
+    const bahanTransactions = houseTransactions.filter(t => t.type === 'EXPENSE' && (
+        t.category === 'Pembelian DOC' ||
+        t.description.toLowerCase().includes('stok') || 
+        t.description.toLowerCase().includes('pakan') || 
+        t.description.toLowerCase().includes('bahan') || 
+        t.description.toLowerCase().includes('beli stok') || 
+        t.description.toLowerCase().includes('pembelian stok')
+    ));
     const operasionalTransactions = houseTransactions.filter(t => t.type === 'EXPENSE' && !bahanTransactions.find(b => b.id === t.id));
+
 
     // --- Total Calculations ---
     const totalProduction = filteredProdLogs.reduce((acc, curr) => acc + (curr.totalButir ?? (curr as any).totalKg ?? 0), 0);

@@ -111,7 +111,9 @@ interface GlobalContextType {
   // Actions
   saveProduction: (log: Omit<ProductionLog, 'id'>) => void;
   saveSale: (sale: Omit<SalesLog, 'id'>) => void;
-  addTransaction: (tx: Omit<FinancialTransaction, 'id'>) => void;
+  addTransaction: (tx: Omit<FinancialTransaction, 'id'>) => string;
+  deleteTransaction: (id: string) => void;
+
   updateTransaction: (id: string, updates: Partial<FinancialTransaction>) => void;
   updateInventory: (id: string, delta: number) => void;
   addInventoryItem: (item: Omit<InventoryItem, 'id'>) => void;
@@ -209,9 +211,16 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setInventory(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
   };
 
-  const addTransaction = (txData: Omit<FinancialTransaction, 'id'>) => {
-    setTransactions(prev => [...prev, { ...txData, id: `tx-${Date.now()}` }]);
+  const addTransaction = (txData: Omit<FinancialTransaction, 'id'>): string => {
+    const id = `tx-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    setTransactions(prev => [...prev, { ...txData, id }]);
+    return id;
   };
+
+  const deleteTransaction = (id: string) => {
+    setTransactions(prev => prev.filter(tx => tx.id !== id));
+  };
+
 
   const updateTransaction = (id: string, updates: Partial<FinancialTransaction>) => {
     setTransactions(prev => prev.map(tx => tx.id === id ? { ...tx, ...updates } : tx));
@@ -399,7 +408,7 @@ export const GlobalProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   return (
     <GlobalContext.Provider value={{
       productionLogs, salesLogs, transactions, inventory, mortalityRecords, recipes,
-      saveProduction, saveSale, addTransaction, updateTransaction,
+      saveProduction, saveSale, addTransaction, updateTransaction, deleteTransaction,
       updateInventory, addInventoryItem, updateInventoryItem,
       addRecipe, updateRecipe, deleteRecipe,
       getHDP, getCumulativeFCR, getFeedIntakePerBird, getFlockAnalytics,

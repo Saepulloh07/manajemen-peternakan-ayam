@@ -16,8 +16,10 @@ import Settings from './pages/Settings';
 import Login from './pages/Login';
 import FeedFormulation from './pages/FeedFormulation';
 import Vaccine from './pages/Vaccine';
+import Population from './pages/Population';
 
 import { HouseProvider } from './HouseContext';
+
 import { FlockProvider } from './FlockContext';
 import { GlobalProvider } from './GlobalContext';
 import { UserRole } from './types';
@@ -78,6 +80,7 @@ function AppContent() {
     }
     switch (activeTab) {
       case 'dashboard':       return <Dashboard />;
+      case 'population':      return <Population />;
       case 'production':      return <Production />;
       case 'feedFormulation': return <FeedFormulation />;
       case 'vaccine':         return <Vaccine />;
@@ -86,6 +89,7 @@ function AppContent() {
       case 'finance':         return <Finance />;
       case 'workers':         return <Workers />;
       case 'settings':        return <Settings />;
+
       default:                return <Dashboard />;
     }
   };

@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard, Egg, ShoppingCart, Package, Wallet, Users,
   Settings, LogOut, Menu, Plus, Home, PillBottle, ChevronRight,
-  Shield, User as UserIcon, Wrench, Syringe,
+  Shield, User as UserIcon, Wrench, Syringe, Activity,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useApp } from './AppContext';
@@ -53,6 +53,7 @@ function SidebarItem({ icon: Icon, label, active, onClick, collapsed, badge }: S
 
 const MENU_ITEMS = [
   { id: 'dashboard',       label: 'Dashboard',       icon: LayoutDashboard, roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN] },
+  { id: 'population',      label: 'Populasi & DOC', icon: Activity,        roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.WORKER] },
   { id: 'production',      label: 'Produksi Harian', icon: Egg,             roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.WORKER] },
   { id: 'feedFormulation', label: 'Formulasi Pakan', icon: PillBottle,      roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN] },
   { id: 'vaccine',         label: 'Vaksin & Biosekuriti', icon: Syringe,    roles: [UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.WORKER] },
@@ -64,6 +65,7 @@ const MENU_ITEMS = [
 ];
 
 const ROLE_COLOR: Record<UserRole, string> = {
+
   [UserRole.SUPER_ADMIN]: 'bg-amber-600',
   [UserRole.ADMIN]:       'bg-slate-600',
   [UserRole.WORKER]:      'bg-slate-500',
