@@ -77,7 +77,7 @@ function KpiCard({ label, value, sub, icon: Icon, trend, trendLabel, accentClass
       ) : sub ? (
         <p className="text-[9px] text-slate-400 mt-1.5 font-medium">{sub}</p>
       ) : null}
-      <Icon size={32} className="absolute right-3 top-3 text-slate-100" />
+      <Icon size={24} className="absolute right-2 top-2 lg:right-3 lg:top-3 text-slate-100 lg:size-32" />
     </div>
   );
 }
@@ -262,7 +262,7 @@ export default function Dashboard() {
       </div>
 
       {/* KPI Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         <KpiCard
           label="Populasi Aktif"
           value={currentCount.toLocaleString()}
@@ -303,9 +303,9 @@ export default function Dashboard() {
       </div>
 
 
-      <div className="grid grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Main Chart — HDP Trend vs Standard */}
-        <div className="col-span-12 lg:col-span-8 bg-white border border-slate-200 shadow-sm">
+        <div className="lg:col-span-8 bg-white border border-slate-200 shadow-sm">
           <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
             <div>
               <h3 className="font-bold text-sm text-slate-700">Tren HDP vs Kurva Standar Strain</h3>
@@ -313,7 +313,7 @@ export default function Dashboard() {
             </div>
             <BarChart3 size={18} className="text-slate-300" />
           </div>
-          <div className="p-4 h-[300px]">
+          <div className="p-4 h-[250px] lg:h-[300px]">
             {houseLogs.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -341,7 +341,7 @@ export default function Dashboard() {
         </div>
 
         {/* Smart Warning Panel */}
-        <div className="col-span-12 lg:col-span-4 bg-slate-900 text-white border border-slate-800 shadow-xl p-6 relative overflow-hidden">
+        <div className="lg:col-span-4 bg-slate-900 text-white border border-slate-800 shadow-xl p-6 relative overflow-hidden min-h-[300px]">
           <div className="absolute top-0 right-0 p-4 opacity-[0.06] pointer-events-none">
             <AlertTriangle size={80} />
           </div>
@@ -401,7 +401,7 @@ export default function Dashboard() {
         </div>
 
         {/* Feed vs Production Chart */}
-        <div className="col-span-12 md:col-span-6 lg:col-span-5 bg-white border border-slate-200 shadow-sm">
+        <div className="col-span-1 lg:col-span-5 bg-white border border-slate-200 shadow-sm">
           <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
             <h3 className="font-bold text-sm text-slate-700">Konsumsi Pakan vs Produksi Telur</h3>
             <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{chartPeriod}</p>
@@ -428,7 +428,7 @@ export default function Dashboard() {
         </div>
 
         {/* Mortality Trend Chart */}
-        <div className="col-span-12 md:col-span-6 lg:col-span-4 bg-white border border-slate-200 shadow-sm">
+        <div className="col-span-1 lg:col-span-4 bg-white border border-slate-200 shadow-sm">
           <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
             <h3 className="font-bold text-sm text-slate-700">Tren Mortalitas Harian</h3>
             <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Ekor/hari</p>
@@ -459,7 +459,7 @@ export default function Dashboard() {
         </div>
 
         {/* Egg Breakdown Today */}
-        <div className="col-span-12 lg:col-span-3 space-y-4">
+        <div className="col-span-1 lg:col-span-3 space-y-4">
           <div className="bg-white border border-slate-200 p-5 shadow-sm">
             <h3 className="font-bold text-sm text-slate-700 mb-4 flex items-center gap-2">
               <Egg size={14} className="text-amber-500" /> Telur Hari Ini

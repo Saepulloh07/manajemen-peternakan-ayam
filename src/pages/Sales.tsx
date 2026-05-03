@@ -162,15 +162,15 @@ export default function Sales() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
-          <div className="bg-white p-8 border border-slate-200 shadow-sm relative">
-            <h3 className="font-bold text-sm text-slate-700 mb-8 flex items-center uppercase tracking-widest">
-                <ShoppingCart className="mr-2 text-amber-500" size={18} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
+        <div className="lg:col-span-2 space-y-6 lg:space-y-8">
+          <div className="bg-white p-4 lg:p-8 border border-slate-200 shadow-sm relative">
+            <h3 className="font-bold text-xs lg:text-sm text-slate-700 mb-6 lg:mb-8 flex items-center uppercase tracking-widest">
+                <ShoppingCart className="mr-2 text-amber-500" size={16} />
                 Input Transaksi Baru
             </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
               <div className="space-y-6">
                 <div>
                   <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-3">Pilih Kategori Produk</label>
@@ -180,7 +180,7 @@ export default function Sales() {
                         key={p.id}
                         onClick={() => setActiveCategory(p.id)}
                         className={cn(
-                          "p-4 rounded-sm border text-left transition-all",
+                          "p-3 lg:p-4 rounded-sm border text-left transition-all",
                           activeCategory === p.id 
                             ? "bg-slate-900 border-slate-900 text-white shadow-md shadow-slate-200" 
                             : "bg-slate-50 border-slate-100 text-slate-600 hover:bg-slate-100"
@@ -195,7 +195,7 @@ export default function Sales() {
                     <button 
                         onClick={() => setActiveCategory('NON_EGG')}
                         className={cn(
-                          "p-4 rounded-sm border text-left transition-all flex items-center space-x-2 bg-slate-50 border-slate-100 text-slate-600 hover:bg-slate-100",
+                          "p-3 lg:p-4 rounded-sm border text-left transition-all flex items-center space-x-2 bg-slate-50 border-slate-100 text-slate-600 hover:bg-slate-100",
                           activeCategory === 'NON_EGG' && "bg-slate-900 border-slate-900 text-white shadow-md shadow-slate-200"
                         )}
                     >
@@ -255,11 +255,11 @@ export default function Sales() {
                       value={quantity || ''}
                       onChange={(e) => setQuantity(Number(e.target.value))}
                       className={cn(
-                        "w-full bg-slate-50 border rounded-sm px-5 py-5 text-2xl font-black italic focus:outline-none transition-all font-mono shadow-inner",
+                        "w-full bg-slate-50 border rounded-sm px-4 lg:px-5 py-4 lg:py-5 text-xl lg:text-2xl font-black italic focus:outline-none transition-all font-mono shadow-inner",
                         isOverStock ? "border-rose-400 focus:border-rose-500 bg-rose-50" : "border-slate-200 focus:border-amber-500"
                       )}
                     />
-                    <span className="absolute right-6 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">butir</span>
+                    <span className="absolute right-4 lg:right-6 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">butir</span>
                   </div>
                   {isOverStock && (
                     <p className="text-[10px] text-rose-600 font-bold mt-1 flex items-center gap-1">
@@ -282,13 +282,13 @@ export default function Sales() {
 
                 <div className="bg-slate-900 p-5 text-white shadow-xl relative overflow-hidden border border-slate-800">
                     <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none transform translate-x-4 -translate-y-4">
-                        <DollarSign size={80} />
+                        <DollarSign size={60} lg:size={80} />
                     </div>
-                    <div className="flex justify-between items-center mb-3">
-                        <span className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em]">Kalkulasi Harga</span>
-                        <div className="px-2 py-0.5 bg-slate-800 rounded-sm text-[8px] font-bold uppercase border border-slate-700 tracking-tighter">Real-time Est.</div>
+                    <div className="flex justify-between items-center mb-2 lg:mb-3">
+                        <span className="text-slate-400 text-[9px] lg:text-[10px] font-bold uppercase tracking-[0.2em]">Kalkulasi Harga</span>
+                        <div className="px-1.5 py-0.5 bg-slate-800 rounded-sm text-[7px] lg:text-[8px] font-bold uppercase border border-slate-700 tracking-tighter">Real-time Est.</div>
                     </div>
-                    <div className="text-3xl font-black italic mb-2 tracking-tighter">
+                    <div className="text-2xl lg:text-3xl font-black italic mb-1 lg:mb-2 tracking-tighter">
                         {isFree ? "GRATIS / FREE" : formatCurrency(totalPrice)}
                     </div>
                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center">
@@ -315,9 +315,9 @@ export default function Sales() {
           </div>
 
           <div className="bg-white border border-slate-200 overflow-hidden shadow-sm">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <h3 className="font-bold text-[10px] uppercase tracking-widest text-slate-700">Histori Penjualan Terakhir</h3>
-                <button className="text-slate-400 hover:text-slate-900"><History size={18} /></button>
+            <div className="p-4 lg:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h3 className="font-bold text-[9px] lg:text-[10px] uppercase tracking-widest text-slate-700">Histori Penjualan Terakhir</h3>
+                <button className="text-slate-400 hover:text-slate-900"><History size={16} /></button>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
@@ -355,8 +355,8 @@ export default function Sales() {
         </div>
 
         {/* Sidebar info */}
-        <div className="space-y-8">
-            <div className="bg-slate-900 text-white p-8 shadow-2xl relative overflow-hidden border border-slate-800">
+        <div className="space-y-6 lg:space-y-8">
+            <div className="bg-slate-900 text-white p-6 lg:p-8 shadow-2xl relative overflow-hidden border border-slate-800">
                 <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none transform translate-x-12 -translate-y-8">
                     <History size={160} />
                 </div>

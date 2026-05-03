@@ -200,7 +200,7 @@ export default function Production() {
   const totalPages = Math.ceil(houseProdLogs.length / ITEMS_PER_PAGE) || 1;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-20">
+    <div className="max-w-5xl mx-auto space-y-4 lg:space-y-6 pb-20">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
@@ -221,8 +221,8 @@ export default function Production() {
 
       {/* Riwayat Modal */}
       {showHistory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white max-w-5xl w-full max-h-[85vh] flex flex-col shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 lg:p-4">
+          <div className="bg-white w-full h-full lg:max-w-5xl lg:h-auto lg:max-h-[85vh] flex flex-col shadow-2xl">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
               <div>
                 <h3 className="font-black text-slate-900 uppercase tracking-tight text-sm">Riwayat Produksi Harian</h3>
@@ -285,15 +285,15 @@ export default function Production() {
       )}
 
       {/* Analytics Cards Row */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
         {/* HDP */}
         <div className={cn(
           'p-4 border shadow-sm relative overflow-hidden',
           hdp >= standardHDP ? 'bg-emerald-50 border-emerald-200' : hdp > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'
         )}>
-          <TrendingUp size={40} className="absolute right-2 top-2 opacity-[0.07]" />
+          <TrendingUp size={40} className="absolute right-2 top-2 opacity-[0.07] hidden sm:block" />
           <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">HDP Hari Ini</p>
-          <p className={cn('text-2xl font-black italic', hdp >= standardHDP ? 'text-emerald-600' : 'text-amber-600')}>
+          <p className={cn('text-xl lg:text-2xl font-black italic', hdp >= standardHDP ? 'text-emerald-600' : 'text-amber-600')}>
             {hdp.toFixed(1)}%
           </p>
           <p className="text-[9px] text-slate-400 font-bold mt-1">Std: {standardHDP}%</p>
@@ -301,25 +301,25 @@ export default function Production() {
 
         {/* FCR Live */}
         <div className="p-4 bg-slate-900 border border-slate-800 shadow-sm relative overflow-hidden">
-          <Activity size={40} className="absolute right-2 top-2 opacity-[0.07] text-amber-500" />
+          <Activity size={40} className="absolute right-2 top-2 opacity-[0.07] text-amber-500 hidden sm:block" />
           <p className="text-[9px] font-bold uppercase tracking-widest text-amber-500 mb-1">FCR Live</p>
-          <p className="text-2xl font-black italic text-white">{currentFCR}</p>
+          <p className="text-xl lg:text-2xl font-black italic text-white">{currentFCR}</p>
           <p className="text-[9px] text-slate-500 font-bold mt-1">Cum: {cumulativeFCR.toFixed(2)}</p>
         </div>
 
         {/* Feed Intake per Bird */}
-        <div className="p-4 bg-white border border-slate-200 shadow-sm relative overflow-hidden">
-          <Flame size={40} className="absolute right-2 top-2 opacity-[0.05]" />
+        <div className="p-4 bg-white border border-slate-200 shadow-sm relative overflow-hidden col-span-2 lg:col-span-1">
+          <Flame size={40} className="absolute right-2 top-2 opacity-[0.05] hidden sm:block" />
           <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">Intake / Ekor</p>
-          <p className="text-2xl font-black italic text-slate-900">{feedIntakePerBird.toFixed(0)}<span className="text-sm font-bold text-slate-400 ml-1">g</span></p>
+          <p className="text-xl lg:text-2xl font-black italic text-slate-900">{feedIntakePerBird.toFixed(0)}<span className="text-sm font-bold text-slate-400 ml-1">g</span></p>
           <p className="text-[9px] text-slate-400 font-bold mt-1">Std layer: 110–120g</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
         {/* Left: Form Input */}
-        <div className="md:col-span-1 space-y-4">
-          <div className="bg-white p-6 border border-slate-200 shadow-sm space-y-4">
+        <div className="lg:col-span-1 space-y-4">
+          <div className="bg-white p-4 lg:p-6 border border-slate-200 shadow-sm space-y-4">
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">Tanggal</label>
               <input type="date" value={date} onChange={e => setDate(e.target.value)}
@@ -390,8 +390,8 @@ export default function Production() {
         </div>
 
         {/* Right: Egg Classification */}
-        <div className="md:col-span-2">
-          <div className="bg-white p-8 border border-slate-200 shadow-sm relative overflow-hidden">
+        <div className="lg:col-span-2">
+          <div className="bg-white p-4 lg:p-8 border border-slate-200 shadow-sm relative overflow-hidden">
             <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none">
               <Egg size={200} />
             </div>
@@ -426,12 +426,12 @@ export default function Production() {
               ))}
             </div>
 
-            <div className="mt-10 pt-6 border-t border-slate-100 flex items-center justify-end gap-4">
-              <button onClick={handleReset} className="px-6 py-3 text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-slate-900 transition-colors">
+            <div className="mt-8 lg:mt-10 pt-6 border-t border-slate-100 flex items-center justify-end gap-3 lg:gap-4">
+              <button onClick={handleReset} className="px-4 lg:px-6 py-3 text-slate-400 font-bold text-[10px] lg:text-xs uppercase tracking-widest hover:text-slate-900 transition-colors">
                 Reset
               </button>
-              <button onClick={handleSave} className="bg-slate-900 text-white px-8 py-4 rounded-sm font-bold text-[10px] uppercase tracking-[0.2em] flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md group">
-                <Save size={15} className="group-hover:text-amber-500 transition-colors" />
+              <button onClick={handleSave} className="bg-slate-900 text-white px-6 lg:px-8 py-3.5 lg:py-4 rounded-sm font-bold text-[9px] lg:text-[10px] uppercase tracking-[0.15em] lg:tracking-[0.2em] flex items-center gap-2 hover:bg-slate-800 transition-all shadow-md group">
+                <Save size={14} className="group-hover:text-amber-500 transition-colors" />
                 <span>Simpan Produksi</span>
               </button>
             </div>

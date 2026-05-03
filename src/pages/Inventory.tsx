@@ -138,8 +138,8 @@ export default function Inventory() {
     <div className="space-y-8 pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Stok Pakan & Gudang</h1>
-          <p className="text-slate-500 text-sm mt-1">Monitor stok porsi harian dan jadwal pengiriman luar kota.</p>
+          <h1 className="text-xl lg:text-2xl font-black text-slate-900 uppercase tracking-tighter italic">Stok Pakan & Gudang</h1>
+          <p className="text-slate-500 text-[10px] lg:text-sm mt-1 uppercase font-bold tracking-widest opacity-70">Monitor stok porsi harian dan jadwal pengiriman luar kota.</p>
         </div>
         <div className="flex items-center space-x-3">
           <button 
@@ -356,9 +356,9 @@ export default function Inventory() {
               ))}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6">
                 {filteredItems.map((item) => (
-                    <div key={item.id} className="bg-white p-6 border border-slate-200 shadow-sm relative overflow-hidden flex flex-col justify-between h-56">
+                    <div key={item.id} className="bg-white p-5 lg:p-6 border border-slate-200 shadow-sm relative overflow-hidden flex flex-col justify-between min-h-[200px] lg:h-56">
                         <div className={cn(
                             "absolute top-0 right-0 w-1.5 h-full",
                             item.quantity <= item.reorderPoint ? "bg-amber-500" : "bg-slate-100"

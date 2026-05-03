@@ -130,20 +130,22 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
 
       {/* Sidebar */}
       <aside className={cn(
-        'bg-slate-900 border-r border-slate-800 flex flex-col transition-all duration-300 z-[70] fixed lg:relative h-full',
-        isSidebarOpen ? 'w-64' : 'w-0 lg:w-[60px]',
-        isMobileMenuOpen ? 'w-64 translate-x-0' : '-translate-x-full lg:translate-x-0'
+        'bg-slate-900 border-r border-slate-800 flex flex-col transition-all duration-300 z-[70] fixed lg:relative h-full overflow-hidden',
+        'w-64', // Base width
+        isMobileMenuOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0',
+        !isSidebarOpen && 'lg:w-[60px]'
       )}>
         {/* Logo */}
-        <div className="p-4 flex items-center gap-3 overflow-hidden border-b border-slate-800">
+        <div className="p-4 flex items-center gap-3 shrink-0 border-b border-slate-800">
           <div className="w-9 h-9 bg-amber-500 rounded-sm flex items-center justify-center shrink-0">
             <Egg className="text-slate-900" size={18} />
           </div>
-          {!collapsed && (
-            <span className="font-black text-xl text-white tracking-tighter italic uppercase truncate">
-              Eggly<span className="text-amber-500 font-bold not-italic font-sans text-[8px] ml-1 bg-white/10 px-1 rounded-sm">PRO</span>
-            </span>
-          )}
+          <span className={cn(
+            "font-black text-xl text-white tracking-tighter italic uppercase truncate transition-opacity duration-200",
+            collapsed ? "opacity-0 w-0" : "opacity-100"
+          )}>
+            Eggly<span className="text-amber-500 font-bold not-italic font-sans text-[8px] ml-1 bg-white/10 px-1 rounded-sm">PRO</span>
+          </span>
         </div>
 
         {/* Navigation */}
@@ -186,25 +188,34 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         {/* Header */}
-        <header className="h-14 lg:h-16 bg-white border-b border-slate-200 px-4 lg:px-6 flex items-center justify-between shrink-0 z-40">
+        <header className="h-14 lg:h-16 bg-white border-b border-slate-200 px-3 lg:px-6 flex items-center justify-between shrink-0 z-40">
           <div className="flex items-center gap-3">
-            <button onClick={() => setIsMobileMenuOpen(true)} className="lg:hidden text-slate-400 hover:text-slate-600 p-1">
-              <Menu size={22} />
+            <button onClick={() => setIsMobileMenuOpen(true)} className="lg:hidden text-slate-400 hover:text-slate-600 p-2 -ml-2">
+              <Menu size={24} />
             </button>
+            
+            <div className="lg:hidden flex items-center gap-2">
+              <div className="w-7 h-7 bg-amber-500 rounded-sm flex items-center justify-center shrink-0">
+                <Egg className="text-slate-900" size={14} />
+              </div>
+              <span className="font-black text-base text-slate-900 tracking-tighter italic uppercase">Eggly</span>
+            </div>
+
             <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="hidden lg:block text-slate-300 hover:text-slate-600 transition-colors p-1">
               <Menu size={18} />
             </button>
 
+
             {/* House Selector */}
             {visibleHouses.length > 0 && (
-              <div className="flex items-center space-x-2 bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-sm">
-                <Home size={12} className="text-slate-400" />
+              <div className="flex items-center space-x-2 bg-slate-50 border border-slate-100 px-2 lg:px-3 py-1 lg:py-1.5 rounded-sm max-w-[120px] lg:max-w-none">
+                <Home size={12} className="text-slate-400 shrink-0" />
                 <select
                   value={selectedHouseId}
                   onChange={e => setSelectedHouseId(e.target.value)}
-                  className="bg-transparent text-[10px] font-black uppercase tracking-tight text-slate-800 focus:outline-none cursor-pointer"
+                  className="bg-transparent text-[9px] lg:text-[10px] font-black uppercase tracking-tight text-slate-800 focus:outline-none cursor-pointer truncate"
                 >
                   {visibleHouses.map(h => (
                     <option key={h.id} value={h.id}>{h.name}</option>

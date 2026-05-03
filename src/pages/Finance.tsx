@@ -417,7 +417,7 @@ export default function Finance() {
         <div className="space-y-8 pb-20">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900 tracking-tight italic uppercase">Finance & Accounting</h1>
+                    <h1 className="text-xl lg:text-2xl font-black text-slate-900 tracking-tight italic uppercase">Finance & Accounting</h1>
                     <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Manajemen keuangan sesuai standar akuntansi peternakan.</p>
                 </div>
                 <div className="flex items-center space-x-3 overflow-x-auto">
@@ -721,18 +721,18 @@ export default function Finance() {
                             </div>
 
                             {/* SUMMARY ROW */}
-                            <div className="grid grid-cols-3 gap-4">
-                                <div className="bg-emerald-900 text-white p-5">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div className="bg-emerald-900 text-white p-4 lg:p-5">
                                     <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400 mb-1">Total Pendapatan</p>
-                                    <p className="text-xl font-black text-emerald-300">{formatCurrency(salesTransactions.reduce((a,t) => a+t.total, 0))}</p>
+                                    <p className="text-lg lg:text-xl font-black text-emerald-300">{formatCurrency(salesTransactions.reduce((a,t) => a+t.total, 0))}</p>
                                 </div>
-                                <div className="bg-rose-900 text-white p-5">
+                                <div className="bg-rose-900 text-white p-4 lg:p-5">
                                     <p className="text-[9px] font-bold uppercase tracking-widest text-rose-400 mb-1">Total Pengeluaran</p>
-                                    <p className="text-xl font-black text-rose-300">{formatCurrency([...bahanTransactions, ...operasionalTransactions].reduce((a,t) => a+t.total, 0))}</p>
+                                    <p className="text-lg lg:text-xl font-black text-rose-300">{formatCurrency([...bahanTransactions, ...operasionalTransactions].reduce((a,t) => a+t.total, 0))}</p>
                                 </div>
-                                <div className={cn("p-5 text-white", netProfit >= 0 ? 'bg-slate-900' : 'bg-rose-950')}>
+                                <div className={cn("p-4 lg:p-5 text-white", netProfit >= 0 ? 'bg-slate-900' : 'bg-rose-950')}>
                                     <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-1">Laba / Rugi Bersih</p>
-                                    <p className={cn("text-xl font-black", netProfit >= 0 ? 'text-amber-400' : 'text-rose-400')}>{netProfit >= 0 ? '+' : ''}{formatCurrency(netProfit)}</p>
+                                    <p className={cn("text-lg lg:text-xl font-black", netProfit >= 0 ? 'text-amber-400' : 'text-rose-400')}>{netProfit >= 0 ? '+' : ''}{formatCurrency(netProfit)}</p>
                                 </div>
                             </div>
 
