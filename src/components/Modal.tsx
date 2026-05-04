@@ -44,7 +44,7 @@ export default function Modal({ isOpen, onClose, title, children, className }: M
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className={cn(
-                "w-full max-w-lg bg-white border border-slate-200 shadow-2xl overflow-hidden pointer-events-auto relative",
+                "w-full max-w-lg bg-white border border-slate-200 shadow-2xl overflow-hidden pointer-events-auto relative flex flex-col max-h-[calc(100vh-2rem)]",
                 className
               )}
             >
@@ -52,7 +52,7 @@ export default function Modal({ isOpen, onClose, title, children, className }: M
               <div className="absolute top-0 right-0 w-2 h-full bg-amber-500"></div>
 
               {/* Header */}
-              <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="px-6 py-4 md:px-8 md:py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
                 <h3 className="text-xs font-black uppercase tracking-[0.25em] text-slate-800">
                   {title}
                 </h3>
@@ -65,7 +65,7 @@ export default function Modal({ isOpen, onClose, title, children, className }: M
               </div>
 
               {/* Content */}
-              <div className="p-8">
+              <div className="p-6 md:p-8 overflow-y-auto custom-scrollbar">
                 {children}
               </div>
             </motion.div>
